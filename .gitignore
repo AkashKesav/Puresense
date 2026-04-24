@@ -31,7 +31,10 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/android/build/
 /coverage/
+.tmp_extract/
+Kimi_Agent_PureSense Flutter Gold App.zip
 
 # Symbolication related
 app.*.symbols
