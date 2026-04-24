@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +31,7 @@ class PurityTestScreen extends ConsumerStatefulWidget {
 class _PurityTestScreenState extends ConsumerState<PurityTestScreen> {
   bool _showGoldTiers = true;
   bool _calibrationExpanded = false;
+  StreamSubscription<String>? _linesSubscription;
 
   @override
   void initState() {
@@ -38,7 +41,8 @@ class _PurityTestScreenState extends ConsumerState<PurityTestScreen> {
 
   void _listenToLines() {
     final bt = ref.read(btProvider);
-    bt.linesStream.listen((line) {
+    _linesSubscription?.cancel();
+    _linesSubscription = bt.linesStream.listen((line) {
       final outcome = _parsePurityOutcome(line);
       if (outcome != null) {
         ref.read(purityTestProvider.notifier).parseAndComplete(line);
@@ -59,6 +63,12 @@ class _PurityTestScreenState extends ConsumerState<PurityTestScreen> {
         ref.read(purityTestProvider.notifier).onTestProgress(samples);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _linesSubscription?.cancel();
+    super.dispose();
   }
 
   PurityOutcome? _parsePurityOutcome(String line) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,17 +28,16 @@ class DensityTestScreen extends ConsumerStatefulWidget {
 }
 
 class _DensityTestScreenState extends ConsumerState<DensityTestScreen> {
+  StreamSubscription<String>? _linesSubscription;
+  ProviderSubscription<FullAnalysisState>? _fullAnalysisSubscription;
+
   @override
   void initState() {
     super.initState();
     _listenToLines();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Show handoff bottom sheet when density result is ready in full analysis mode
-    ref.listen<FullAnalysisState>(fullAnalysisProvider, (previous, next) {
+    _fullAnalysisSubscription = ref.listenManual<FullAnalysisState>(
+      fullAnalysisProvider,
+      (previous, next) {
       if (next.densityResult != null &&
           (previous?.densityResult == null) &&
           next.isFullAnalysisMode) {
@@ -59,7 +60,8 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen> {
 
   void _listenToLines() {
     final bt = ref.read(btProvider);
-    bt.linesStream.listen((line) {
+    _linesSubscription?.cancel();
+    _linesSubscription = bt.linesStream.listen((line) {
       final densityState = ref.read(densityTestProvider);
 
       if (ResultParser.parseScaleZeroed(line) == true) {
@@ -113,6 +115,13 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen> {
         ref.read(densityTestProvider.notifier).setError(error);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _linesSubscription?.cancel();
+    _fullAnalysisSubscription?.close();
+    super.dispose();
   }
 
   @override

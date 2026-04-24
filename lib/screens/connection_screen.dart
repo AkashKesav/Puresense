@@ -16,46 +16,75 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
   List<BluetoothDevice> _devices = [];
   bool _scanning = false;
   BluetoothDevice? _connectingDevice;
+  String? _statusMessage;
 
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
-  }
-
-  Future<void> _requestPermissions() async {
-    await ref.read(btProvider).requestPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scanDevices();
+    });
   }
 
   Future<void> _scanDevices() async {
-    setState(() => _scanning = true);
-    final devices = await ref.read(btProvider).getPairedDevices();
     setState(() {
-      _devices = devices;
-      _scanning = false;
+      _scanning = true;
+      _statusMessage = null;
     });
+
+    try {
+      final devices = await ref.read(btProvider).getPairedDevices();
+      if (!mounted) return;
+      setState(() {
+        _devices = devices;
+        _scanning = false;
+        if (devices.isEmpty) {
+          _statusMessage = 'No paired devices found. Pair the ESP32 in Android Bluetooth settings first.';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _devices = [];
+        _scanning = false;
+        _statusMessage = e.toString().replaceFirst('Bad state: ', '');
+      });
+    }
   }
 
   Future<void> _connect(BluetoothDevice device) async {
-    setState(() => _connectingDevice = device);
-    final bt = ref.read(btProvider);
-    await bt.connect(device);
-
-    // Listen for status changes
-    bt.status.addListener(() {
-      if (bt.status.value == BtStatus.connected && mounted) {
-        context.go('/home');
-      }
-      if (bt.status.value == BtStatus.disconnected && mounted) {
-        setState(() => _connectingDevice = null);
-      }
+    setState(() {
+      _connectingDevice = device;
+      _statusMessage = null;
     });
+
+    final bt = ref.read(btProvider);
+    try {
+      await bt.connect(device);
+      if (!mounted) return;
+      if (bt.currentStatus == BtStatus.connected) {
+        context.go('/home');
+        return;
+      }
+      setState(() {
+        _statusMessage = 'Connection did not complete. Please try again.';
+        _connectingDevice = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = e.toString().replaceFirst('Bad state: ', '');
+        _connectingDevice = null;
+      });
+    }
+  }
+
+  Future<void> _openBluetoothSettings() async {
+    await ref.read(btProvider).openSettings();
   }
 
   @override
   Widget build(BuildContext context) {
-    final btStatus = ref.watch(btProvider).status.value;
-
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       body: SafeArea(
@@ -92,6 +121,31 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openBluetoothSettings,
+                  icon: const Icon(Icons.settings_bluetooth),
+                  label: const Text('Open Bluetooth Settings'),
+                ),
+              ),
+              if (_statusMessage != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB300).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFFB300).withOpacity(0.35)),
+                  ),
+                  child: Text(
+                    _statusMessage!,
+                    style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               Expanded(
                 child: _devices.isEmpty
@@ -106,11 +160,11 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'No devices found',
+                              _scanning ? 'Searching for devices...' : 'No devices found',
                               style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 16),
                             ),
                             Text(
-                              'Tap Scan to find paired devices',
+                              'This list shows devices already paired with Android.',
                               style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
                             ),
                           ],

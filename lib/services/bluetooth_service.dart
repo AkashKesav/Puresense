@@ -21,6 +21,7 @@ class BluetoothService {
   final _probeStatusController = StreamController<ProbeStatus>.broadcast();
 
   ValueNotifier<BtStatus> get status => _status;
+  BtStatus get currentStatus => _status.value;
   Stream<String> get linesStream => _linesController.stream;
   Stream<LiveData> get liveDataStream => _liveDataController.stream;
   Stream<ProbeStatus> get probeStatusStream => _probeStatusController.stream;
@@ -40,16 +41,44 @@ class BluetoothService {
     return results.values.every((r) => r.isGranted);
   }
 
+  Future<void> ensureBluetoothReady({bool requestEnable = true}) async {
+    final hasPermissions = await requestPermissions();
+    if (!hasPermissions) {
+      throw StateError('Bluetooth and location permissions are required.');
+    }
+
+    final enabled = await _bt.isEnabled ?? false;
+    if (enabled) return;
+
+    if (requestEnable) {
+      final turnedOn = await _bt.requestEnable() ?? false;
+      if (turnedOn) return;
+    }
+
+    throw StateError('Bluetooth is turned off. Turn it on and try again.');
+  }
+
+  Future<void> openSettings() => _bt.openSettings();
+
   Future<List<BluetoothDevice>> getPairedDevices() async {
+    await ensureBluetoothReady();
     try {
-      return await _bt.getBondedDevices();
+      final devices = await _bt.getBondedDevices();
+      devices.sort((a, b) => (a.name ?? a.address).compareTo(b.name ?? b.address));
+      return devices;
     } catch (e) {
-      return [];
+      throw StateError('Unable to load paired Bluetooth devices.');
     }
   }
 
   Future<void> connect(BluetoothDevice device) async {
     _lastDevice = device;
+    _retryTimer?.cancel();
+    if (_connection?.isConnected ?? false) {
+      await disconnect();
+    }
+
+    await ensureBluetoothReady();
     _status.value = BtStatus.connecting;
     try {
       _connection = await BluetoothConnection.toAddress(device.address);
@@ -57,10 +86,14 @@ class BluetoothService {
         _status.value = BtStatus.connected;
         _connection!.input!.listen(_onData, onDone: _onDisconnect, onError: (_) => _onDisconnect());
       } else {
+        _connection = null;
         _status.value = BtStatus.disconnected;
+        throw StateError('Connection could not be established.');
       }
     } catch (e) {
+      _connection = null;
       _status.value = BtStatus.disconnected;
+      throw StateError('Could not connect to ${device.name ?? device.address}.');
     }
   }
 
@@ -68,6 +101,7 @@ class BluetoothService {
     _retryTimer?.cancel();
     await _connection?.close();
     _connection = null;
+    _buffer = '';
     _status.value = BtStatus.disconnected;
   }
 
