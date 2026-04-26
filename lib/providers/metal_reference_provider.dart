@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/live_data.dart';
+import '../providers/calibration_provider.dart';
 import '../services/metal_reference_service.dart';
 import '../utils/range_calculator.dart';
 
@@ -41,7 +42,7 @@ class MetalReferenceNotifier extends StateNotifier<MetalReferenceState> {
   }
 
   void _loadDefaults() {
-    final metals = RangeCalculator.computeMetalRanges(22000.0);
+    final metals = RangeCalculator.computeMetalRanges(-1500.0);
     state = MetalReferenceState(metals: metals);
   }
 
@@ -57,7 +58,83 @@ class MetalReferenceNotifier extends StateNotifier<MetalReferenceState> {
 
   void updateRanges(double anchorADC) {
     final metals = RangeCalculator.computeMetalRanges(anchorADC);
+    // Preserve custom metals when recalculating
     state = state.copyWith(metals: metals);
+  }
+
+  /// Update a built-in metal's ADC value and tolerance in-place
+  void updateMetalADC(String metalName, double newADC, double newTolerance) {
+    final updated = state.metals.map((m) {
+      if (m.metalName == metalName) {
+        return MetalRange(
+          metalName: m.metalName,
+          expectedADC: newADC,
+          min: newADC - newTolerance,
+          max: newADC + newTolerance,
+          color: m.color,
+          description: m.description,
+          densityGcm3: m.densityGcm3,
+          isCustom: m.isCustom,
+        );
+      }
+      return m;
+    }).toList();
+
+    // Also check custom metals
+    final updatedCustom = state.customMetals.map((m) {
+      if (m.metalName == metalName) {
+        return MetalRange(
+          metalName: m.metalName,
+          expectedADC: newADC,
+          min: newADC - newTolerance,
+          max: newADC + newTolerance,
+          color: m.color,
+          description: m.description,
+          densityGcm3: m.densityGcm3,
+          isCustom: m.isCustom,
+        );
+      }
+      return m;
+    }).toList();
+
+    state = state.copyWith(metals: updated, customMetals: updatedCustom);
+  }
+
+  /// Update a metal with explicit min/max range
+  void updateMetalRange(String metalName, double newADC, double newMin, double newMax) {
+    final updated = state.metals.map((m) {
+      if (m.metalName == metalName) {
+        return MetalRange(
+          metalName: m.metalName,
+          expectedADC: newADC,
+          min: newMin,
+          max: newMax,
+          color: m.color,
+          description: m.description,
+          densityGcm3: m.densityGcm3,
+          isCustom: m.isCustom,
+        );
+      }
+      return m;
+    }).toList();
+
+    final updatedCustom = state.customMetals.map((m) {
+      if (m.metalName == metalName) {
+        return MetalRange(
+          metalName: m.metalName,
+          expectedADC: newADC,
+          min: newMin,
+          max: newMax,
+          color: m.color,
+          description: m.description,
+          densityGcm3: m.densityGcm3,
+          isCustom: m.isCustom,
+        );
+      }
+      return m;
+    }).toList();
+
+    state = state.copyWith(metals: updated, customMetals: updatedCustom);
   }
 
   void addCustomMetal(MetalRange metal) {
@@ -71,11 +148,34 @@ class MetalReferenceNotifier extends StateNotifier<MetalReferenceState> {
     state = state.copyWith(customMetals: custom);
   }
 
+  /// Reset all metals to factory defaults
+  void resetToDefaults() {
+    final metals = RangeCalculator.computeMetalRanges(-1500.0);
+    state = MetalReferenceState(metals: metals, customMetals: []);
+  }
+
   void clearError() {
     state = state.copyWith(error: null);
   }
 }
 
 final metalReferenceProvider = StateNotifierProvider<MetalReferenceNotifier, MetalReferenceState>((ref) {
-  return MetalReferenceNotifier();
+  final notifier = MetalReferenceNotifier();
+
+  // Auto-sync: when ANY calibration state changes, update metal ranges
+  ref.listen<CalibrationState>(calibrationProvider, (prev, next) {
+    if (prev?.anchorADC != next.anchorADC ||
+        prev?.anchorKarat != next.anchorKarat ||
+        prev?.tolerance != next.tolerance) {
+      notifier.updateRanges(next.anchorADC);
+    }
+  });
+
+  // Also initialize with current calibration state (not just default -1500)
+  final currentCal = ref.read(calibrationProvider);
+  if (currentCal.anchorADC != -1500.0) {
+    notifier.updateRanges(currentCal.anchorADC);
+  }
+
+  return notifier;
 });

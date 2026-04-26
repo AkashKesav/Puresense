@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/live_data.dart';
-import '../providers/density_test_provider.dart';
 import '../providers/history_provider.dart';
+import '../utils/number_format.dart' as nf;
 
 class DensityResultCard extends ConsumerWidget {
   final DensityResult result;
@@ -13,29 +14,38 @@ class DensityResultCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFB300).withOpacity(0.5), width: 2),
+        border: Border.all(color: const Color(0xFFFFB300).withAlpha(80), width: 2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Density Result',
-            style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+            style: GoogleFonts.inter(
+              color: Colors.white.withAlpha(130),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            '${result.density.toStringAsFixed(2)} g/cm³',
-            style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800),
+            '${nf.NumberFormat.formatDensity(result.density)} g/cm³',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFB300).withOpacity(0.15),
+              color: const Color(0xFFFFB300).withAlpha(15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -55,12 +65,19 @@ class DensityResultCard extends ConsumerWidget {
                     children: [
                       Text(
                         result.metalLabel.toUpperCase(),
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _getReferenceRange(result.metalLabel),
-                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(120),
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -70,19 +87,22 @@ class DensityResultCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const Divider(color: Color(0xFF333333)),
+          Divider(color: Colors.white.withAlpha(15)),
           const SizedBox(height: 12),
-          _buildDetailRow('Air weight:', '${result.wAir.toStringAsFixed(2)} g'),
-          _buildDetailRow('Water baseline:', '${result.wWater.toStringAsFixed(2)} g'),
-          _buildDetailRow('Submerged:', '${result.wSubmerged.toStringAsFixed(2)} g'),
-          _buildDetailRow('Buoyancy force:', '${result.buoyancy.toStringAsFixed(2)} g'),
+          _buildDetailRow('Air weight:', '${nf.NumberFormat.formatWeight(result.wAir)} g'),
+          _buildDetailRow('Water baseline:', '${nf.NumberFormat.formatWeight(result.wWater)} g'),
+          _buildDetailRow('Submerged:', '${nf.NumberFormat.formatWeight(result.wSubmerged)} g'),
+          _buildDetailRow('Buoyancy force:', '${nf.NumberFormat.formatWeight(result.buoyancy)} g'),
           const SizedBox(height: 20),
           if (showSave)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => _saveResult(ref),
-                child: const Text('Save Result'),
+                onPressed: () => _saveResult(ref, context),
+                child: Text(
+                  'Save Result',
+                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
               ),
             ),
         ],
@@ -95,9 +115,19 @@ class DensityResultCard extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14)),
+          Text(
+            label,
+            style: GoogleFonts.inter(color: Colors.white.withAlpha(100), fontSize: 14),
+          ),
           const Spacer(),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -122,7 +152,11 @@ class DensityResultCard extends ConsumerWidget {
     }
   }
 
-  void _saveResult(WidgetRef ref) {
-    ref.read(historyProvider.notifier).addEntry('density', result.historyLabel, result);
+  void _saveResult(WidgetRef ref, BuildContext context) {
+    final label = 'Density Test — ${result.metalLabel} ${nf.NumberFormat.formatDensity(result.density)} g/cm³';
+    ref.read(historyProvider.notifier).addEntry('density', label, result);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Result saved to history')),
+    );
   }
 }

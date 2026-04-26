@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../models/live_data.dart';
+import '../utils/result_parser.dart';
+import '../utils/statistical_classifier.dart';
 
 enum BtStatus { connecting, connected, disconnected }
+
 enum ProbeStatus { inAir, contact, noSignal, unknown }
 
 class BluetoothService {
@@ -13,178 +16,298 @@ class BluetoothService {
   factory BluetoothService() => _instance;
   BluetoothService._internal();
 
-  final FlutterBluetoothSerial _bt = FlutterBluetoothSerial.instance;
   BluetoothConnection? _connection;
-  final _status = ValueNotifier<BtStatus>(BtStatus.disconnected);
+  final ValueNotifier<BtStatus> status = ValueNotifier(BtStatus.disconnected);
+
+  // Stream controllers
   final _linesController = StreamController<String>.broadcast();
   final _liveDataController = StreamController<LiveData>.broadcast();
   final _probeStatusController = StreamController<ProbeStatus>.broadcast();
 
-  ValueNotifier<BtStatus> get status => _status;
-  BtStatus get currentStatus => _status.value;
   Stream<String> get linesStream => _linesController.stream;
   Stream<LiveData> get liveDataStream => _liveDataController.stream;
   Stream<ProbeStatus> get probeStatusStream => _probeStatusController.stream;
 
-  String _buffer = '';
-  Timer? _retryTimer;
-  BluetoothDevice? _lastDevice;
+  String _lineBuffer = '';
+  bool _disposed = false;
+  bool _autoReconnectEnabled = true;
+  bool _manualDisconnect = false;
+  Timer? _reconnectTimer;
 
-  Future<bool> requestPermissions() async {
-    final permissions = [
-      Permission.bluetooth,
-      Permission.bluetoothConnect,
-      Permission.bluetoothScan,
-      Permission.location,
-    ];
-    final results = await permissions.request();
-    return results.values.every((r) => r.isGranted);
-  }
+  // ─── Purity test state ───
+  bool _isCollectingPurity = false;
+  final List<int> _purityADCSamples = [];
+  final List<TimedSample> _purityTimedSamples = [];
+  Timer? _purityTimer;
+  Completer<int>? _purityCompleter;
 
-  Future<void> ensureBluetoothReady({bool requestEnable = true}) async {
-    final hasPermissions = await requestPermissions();
-    if (!hasPermissions) {
-      throw StateError('Bluetooth and location permissions are required.');
-    }
+  // ─── Probe-in-air sound debounce (5 seconds) ───
+  DateTime _lastProbeAirSoundTime = DateTime(2000);
+  ProbeStatus _lastProbeStatus = ProbeStatus.unknown;
 
-    final enabled = await _bt.isEnabled ?? false;
-    if (enabled) return;
-
-    if (requestEnable) {
-      final turnedOn = await _bt.requestEnable() ?? false;
-      if (turnedOn) return;
-    }
-
-    throw StateError('Bluetooth is turned off. Turn it on and try again.');
-  }
-
-  Future<void> openSettings() => _bt.openSettings();
-
-  Future<List<BluetoothDevice>> getPairedDevices() async {
-    await ensureBluetoothReady();
-    try {
-      final devices = await _bt.getBondedDevices();
-      devices.sort((a, b) => (a.name ?? a.address).compareTo(b.name ?? b.address));
-      return devices;
-    } catch (e) {
-      throw StateError('Unable to load paired Bluetooth devices.');
+  void setAutoReconnectEnabled(bool enabled) {
+    _autoReconnectEnabled = enabled;
+    if (!enabled) {
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
     }
   }
 
+  /// Connect to a Bluetooth device
   Future<void> connect(BluetoothDevice device) async {
-    _lastDevice = device;
-    _retryTimer?.cancel();
-    if (_connection?.isConnected ?? false) {
-      await disconnect();
-    }
+    _manualDisconnect = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    await _connectInternal(
+      device,
+      retryOnceOnFailure: _autoReconnectEnabled,
+    );
+  }
 
-    await ensureBluetoothReady();
-    _status.value = BtStatus.connecting;
+  Future<void> _connectInternal(
+    BluetoothDevice device, {
+    required bool retryOnceOnFailure,
+  }) async {
+    if (_disposed) return;
+    status.value = BtStatus.connecting;
+
     try {
-      _connection = await BluetoothConnection.toAddress(device.address);
-      if (_connection != null && _connection!.isConnected) {
-        _status.value = BtStatus.connected;
-        _connection!.input!.listen(_onData, onDone: _onDisconnect, onError: (_) => _onDisconnect());
-      } else {
-        _connection = null;
-        _status.value = BtStatus.disconnected;
-        throw StateError('Connection could not be established.');
-      }
+      await _openConnection(device);
     } catch (e) {
-      _connection = null;
-      _status.value = BtStatus.disconnected;
-      throw StateError('Could not connect to ${device.name ?? device.address}.');
+      status.value = BtStatus.disconnected;
+      if (!retryOnceOnFailure || _manualDisconnect || _disposed) {
+        return;
+      }
+
+      await Future.delayed(const Duration(seconds: 3));
+      if (status.value == BtStatus.disconnected &&
+          !_disposed &&
+          !_manualDisconnect) {
+        try {
+          await _openConnection(device);
+        } catch (_) {
+          status.value = BtStatus.disconnected;
+        }
+      }
     }
+  }
+
+  Future<void> _openConnection(BluetoothDevice device) async {
+    final connection = await BluetoothConnection.toAddress(device.address)
+        .timeout(const Duration(seconds: 10));
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _connection = connection;
+    _manualDisconnect = false;
+    status.value = BtStatus.connected;
+
+    connection.input?.listen(
+      (data) => _onDataReceived(data),
+      onDone: () => _onDisconnected(device),
+      onError: (_) => _onDisconnected(device),
+    );
+  }
+
+  void _onDisconnected(BluetoothDevice device) {
+    status.value = BtStatus.disconnected;
+    _connection = null;
+
+    if (_autoReconnectEnabled && !_manualDisconnect && !_disposed) {
+      _scheduleReconnect(device);
+    }
+  }
+
+  void _scheduleReconnect(BluetoothDevice device) {
+    if (_reconnectTimer != null) return;
+
+    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+      _reconnectTimer = null;
+      if (_disposed || _manualDisconnect || !_autoReconnectEnabled) return;
+      if (status.value == BtStatus.connected ||
+          status.value == BtStatus.connecting) {
+        return;
+      }
+      unawaited(_connectInternal(device, retryOnceOnFailure: false));
+    });
   }
 
   Future<void> disconnect() async {
-    _retryTimer?.cancel();
+    _manualDisconnect = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     await _connection?.close();
     _connection = null;
-    _buffer = '';
-    _status.value = BtStatus.disconnected;
+    status.value = BtStatus.disconnected;
   }
 
-  void _onData(Uint8List data) {
-    _buffer += String.fromCharCodes(data);
-    while (_buffer.contains('\n')) {
-      final idx = _buffer.indexOf('\n');
-      final line = _buffer.substring(0, idx).trim();
-      _buffer = _buffer.substring(idx + 1);
-      if (line.isNotEmpty) {
-        _linesController.add(line);
-        _parseLiveLine(line);
+  // ─── Data reception & parsing ───
+  void _onDataReceived(Uint8List data) {
+    _lineBuffer += utf8.decode(data, allowMalformed: true);
+
+    while (_lineBuffer.contains('\n')) {
+      final idx = _lineBuffer.indexOf('\n');
+      final line = _lineBuffer.substring(0, idx).trim();
+      _lineBuffer = _lineBuffer.substring(idx + 1);
+
+      if (line.isEmpty) continue;
+
+      // Emit raw line for listeners
+      _linesController.add(line);
+
+      // Parse live data: "HX711: X.XX g | ADS: Y"
+      final liveData = ResultParser.parseLiveData(line);
+      if (liveData != null) {
+        _liveDataController.add(liveData);
+
+        // Update probe status (ADC > 15000 = air, else contact)
+        ProbeStatus newStatus;
+        if (liveData.adcValue > 15000) {
+          newStatus = ProbeStatus.inAir;
+        } else {
+          newStatus = ProbeStatus.contact;
+        }
+
+        // Only emit if changed (reduces unnecessary rebuilds)
+        if (newStatus != _lastProbeStatus) {
+          _lastProbeStatus = newStatus;
+          _probeStatusController.add(newStatus);
+        }
+
+        // If collecting purity samples, add this ADC reading
+        if (_isCollectingPurity) {
+          _purityADCSamples.add(liveData.adcValue);
+          _purityTimedSamples.add(TimedSample(
+            timestamp: DateTime.now(),
+            adc: liveData.adcValue,
+          ));
+        }
       }
     }
   }
 
-  void _parseLiveLine(String line) {
-    final live = _parseLiveData(line);
-    if (live != null) {
-      _liveDataController.add(live);
-      _updateProbeStatus(live);
+  // ─── Probe-in-air sound debounce ───
+  /// Returns true if a probe-in-air sound should play (5s debounce)
+  bool shouldPlayProbeAirSound() {
+    final now = DateTime.now();
+    if (now.difference(_lastProbeAirSoundTime).inSeconds >= 5) {
+      _lastProbeAirSoundTime = now;
+      return true;
     }
+    return false;
   }
 
-  LiveData? _parseLiveData(String line) {
-    final regex = RegExp(r'HX711:\s*([0-9.]+)\s*g\s*\|\s*ADS:\s*(-?\d+)');
-    final match = regex.firstMatch(line);
-    if (match != null) {
-      final weight = double.tryParse(match.group(1)!) ?? 0.0;
-      final adc = int.tryParse(match.group(2)!) ?? 0;
-      return LiveData(
-        weightGrams: weight,
-        adcValue: adc,
-        timestamp: DateTime.now(),
-      );
-    }
-    return null;
+  // ─── Command sending (PRIVATE — never expose raw commands to UI) ───
+  void _sendCommand(String cmd) {
+    if (_connection == null || status.value != BtStatus.connected) return;
+    try {
+      _connection!.output.add(Uint8List.fromList(utf8.encode('$cmd\n')));
+      _connection!.output.allSent;
+    } catch (_) {}
   }
 
-  void _updateProbeStatus(LiveData live) {
-    if (live.adcValue > 18000) {
-      _probeStatusController.add(ProbeStatus.inAir);
-    } else if (live.adcValue < 500) {
-      _probeStatusController.add(ProbeStatus.noSignal);
-    } else {
-      _probeStatusController.add(ProbeStatus.contact);
-    }
-  }
+  // ─── PUBLIC API: Hardware commands with descriptive names ───
 
-  void _onDisconnect() {
-    if (_status.value == BtStatus.connected) {
-      _status.value = BtStatus.disconnected;
-      _retryTimer?.cancel();
-      _retryTimer = Timer(const Duration(seconds: 3), () {
-        if (_lastDevice != null && _status.value == BtStatus.disconnected) {
-          connect(_lastDevice!);
-        }
-      });
-    }
-  }
+  /// Tare (zero) the scale — sends 'T' to Arduino
+  void zeroScale() => _sendCommand('T');
 
-  void _sendCommand(String char) {
-    if (_connection != null && _connection!.isConnected) {
-      _connection!.output.add(Uint8List.fromList([char.codeUnitAt(0)]));
-    }
-  }
-
-  // Public methods that internally send commands
-  void startPurityTest() => _sendCommand('T');
-  void startCalibration() => _sendCommand('R');
+  /// Record air weight — sends 'A' to Arduino
   void requestDensityAir() => _sendCommand('A');
+
+  /// Record water baseline — sends 'W' to Arduino
   void requestDensityWater() => _sendCommand('W');
+
+  /// Record submerged weight — sends 'S' to Arduino
   void requestDensitySubmerged() => _sendCommand('S');
+
+  /// Calculate density — sends 'C' to Arduino
   void requestDensityCalculate() => _sendCommand('C');
-  void zeroScale() => _sendCommand('Z');
-  void readADS() => _sendCommand('D');
-  void printMenu() => _sendCommand('M');
+
+  /// Get single live HX711 reading — sends 'R' to Arduino
+  void readLiveHX711() => _sendCommand('R');
+
+  /// Get single ADS1115 reading — sends 'D' to Arduino
+  void readADS1115() => _sendCommand('D');
+
+  /// Show Arduino menu — sends 'M' to Arduino
+  void showMenu() => _sendCommand('M');
+
+  /// Start purity test (standard mode) — collects ADC values for 2 seconds.
+  /// Returns the mean ADC value via a Future.
+  Future<int> startPurityTest() async {
+    return _startCollection(const Duration(seconds: 2));
+  }
+
+  Future<int> startPurityTestFor(Duration duration) async {
+    return _startCollection(duration);
+  }
+
+  /// Start purity test (statistical mode) — collects ADC values for 1 second.
+  /// Shorter window because slope-based analysis compensates for drift.
+  /// Returns the mean ADC value via a Future.
+  Future<int> startPurityTestStatistical() async {
+    return _startCollection(const Duration(seconds: 1));
+  }
+
+  Future<int> startPurityTestAdaptive() async {
+    return _startCollection(const Duration(milliseconds: 800));
+  }
+
+  /// Internal collection method with configurable duration.
+  Future<int> _startCollection(Duration duration) async {
+    _purityADCSamples.clear();
+    _purityTimedSamples.clear();
+    _isCollectingPurity = true;
+    _purityCompleter = Completer<int>();
+
+    _purityTimer = Timer(duration, () {
+      _isCollectingPurity = false;
+      if (_purityADCSamples.isEmpty) {
+        _purityCompleter?.complete(0);
+      } else {
+        final mean = _purityADCSamples.reduce((a, b) => a + b) ~/
+            _purityADCSamples.length;
+        _purityCompleter?.complete(mean);
+      }
+    });
+
+    return _purityCompleter!.future;
+  }
+
+  /// Get the raw ADC samples collected during purity test
+  List<int> get purityADCSamplesCopy => List.unmodifiable(_purityADCSamples);
+
+  /// Get the timestamped ADC samples for statistical analysis
+  List<TimedSample> get purityTimedSamplesCopy =>
+      List.unmodifiable(_purityTimedSamples);
+
+  /// Get number of collected purity samples so far
+  int get puritySampleCount => _purityADCSamples.length;
+
+  /// Cancel ongoing purity test
+  void cancelPurityTest() {
+    _isCollectingPurity = false;
+    _purityTimer?.cancel();
+    _purityADCSamples.clear();
+    _purityTimedSamples.clear();
+    if (_purityCompleter != null && !_purityCompleter!.isCompleted) {
+      _purityCompleter!.complete(0);
+    }
+  }
+
+  /// Start calibration — collects ADC values from continuous stream for 2 seconds.
+  /// Returns mean ADC for calibration anchor.
+  Future<int> startCalibration() async {
+    return startPurityTest(); // Same collection mechanism
+  }
 
   void dispose() {
-    _retryTimer?.cancel();
+    _disposed = true;
+    _purityTimer?.cancel();
+    _reconnectTimer?.cancel();
     _linesController.close();
     _liveDataController.close();
     _probeStatusController.close();
-    disconnect();
+    _connection?.close();
   }
 }

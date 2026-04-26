@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/calibration_provider.dart';
-import '../providers/purity_test_provider.dart';
-import '../providers/sound_provider.dart';
-import '../services/sound_service.dart';
-import '../utils/range_calculator.dart';
+import '../providers/bt_provider.dart';
+import '../utils/number_format.dart' as nf;
 
 class CalibrationCard extends ConsumerStatefulWidget {
   const CalibrationCard({super.key});
@@ -14,202 +13,289 @@ class CalibrationCard extends ConsumerStatefulWidget {
 }
 
 class _CalibrationCardState extends ConsumerState<CalibrationCard> {
-  bool _expanded = false;
-  final _adcController = TextEditingController(text: '22000');
-  int _selectedKarat = 24;
+  bool _isExpanded = false;
+  bool _isCalibrating = false;
+  int? _karatSelection;
+  final _adcController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     final cal = ref.watch(calibrationProvider);
-    final purityState = ref.watch(purityTestProvider);
+    final isCalibrated = cal.anchorADC != 0;
 
-    if (!_expanded && _adcController.text.isEmpty) {
-      _adcController.text = cal.anchorADC.toStringAsFixed(0);
-      _selectedKarat = cal.anchorKarat;
-    }
+    _karatSelection ??= cal.anchorKarat;
 
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFB300).withOpacity(0.3), width: 1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isCalibrated && !_isExpanded
+              ? Colors.green.withAlpha(60)
+              : const Color(0xFFFFB300).withAlpha(40),
+        ),
       ),
       child: Column(
         children: [
-          ListTile(
-            title: Row(
-              children: [
-                const Icon(Icons.verified, color: Color(0xFFFFB300), size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Anchor: ${cal.anchorKarat}k gold at ${cal.anchorADC.toStringAsFixed(0)} ADC',
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            trailing: TextButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              child: Text(_expanded ? 'Done' : 'Edit'),
-            ),
-          ),
-          if (_expanded) ...[
-            const Divider(color: Color(0xFF333333), height: 1),
-            Padding(
+          // Header
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  const Text(
-                    'Set your calibration anchor',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                  Icon(
+                    isCalibrated ? Icons.check_circle : Icons.tune,
+                    color: isCalibrated && !_isExpanded
+                        ? Colors.green
+                        : const Color(0xFFFFB300),
+                    size: 20,
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildKaratDropdown(),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildADCField(),
-                      ),
-                    ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: isCalibrated && !_isExpanded
+                        ? Text(
+                            'Anchor: ${cal.anchorKarat}k gold at ${nf.NumberFormat.formatADC(cal.anchorADC.toInt())} ADC',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        : Text(
+                            'Set your calibration anchor',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: purityState.isCalibrating
-                          ? null
-                          : () => _startCalibration(),
-                      icon: purityState.isCalibrating
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.sensors),
-                      label: Text(purityState.isCalibrating ? 'Calibrating...' : 'Calibrate from Sample'),
-                    ),
-                  ),
-                  if (purityState.calibrationProgress != null && purityState.calibrationProgress! > 0) ...[
-                    const SizedBox(height: 16),
+                  if (isCalibrated && !_isExpanded)
                     Text(
-                      'Measured: ${purityState.calibrationProgress} ADC',
-                      style: const TextStyle(color: Color(0xFFFFB300), fontSize: 14),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _confirmAndSave,
-                        child: const Text('Confirm & Save'),
+                      'Edit',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFFFB300),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
+                    )
+                  else
+                    Icon(
+                      _isExpanded ? Icons.expand_less : Icons.expand_more,
+                      color: Colors.white.withAlpha(100),
+                      size: 22,
                     ),
-                  ],
-                  const SizedBox(height: 16),
-                  _buildLivePreview(),
                 ],
               ),
             ),
-          ],
+          ),
+
+          // Expanded content
+          if (_isExpanded || !isCalibrated)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(color: Color(0xFF333333), height: 1),
+                  const SizedBox(height: 16),
+
+                  // Karat & ADC inputs
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Karat',
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withAlpha(130),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A1A),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.white.withAlpha(20)),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  value: _karatSelection,
+                                  isExpanded: true,
+                                  dropdownColor: const Color(0xFF2A2A2A),
+                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                                  items: [9, 10, 14, 18, 22, 24].map((k) {
+                                    return DropdownMenuItem(value: k, child: Text('${k}k'));
+                                  }).toList(),
+                                  onChanged: (v) {
+                                    if (v != null) setState(() => _karatSelection = v);
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ADC Value',
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withAlpha(130),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _adcController,
+                              keyboardType: TextInputType.number,
+                              style: GoogleFonts.inter(color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: nf.NumberFormat.formatADC(cal.anchorADC.toInt()),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Calibrate from sample
+                  Text(
+                    'OR measure live with a known sample:',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(100),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isCalibrating ? null : _calibrateFromSample,
+                      icon: _isCalibrating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFFFB300),
+                              ),
+                            )
+                          : const Icon(Icons.sensors, size: 18),
+                      label: Text(
+                        _isCalibrating ? 'Collecting readings...' : 'Calibrate from Sample',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Save button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final adcText = _adcController.text.replaceAll(',', '');
+                        final adc = double.tryParse(adcText) ?? cal.anchorADC;
+                        final karat = _karatSelection ?? cal.anchorKarat;
+
+                        ref.read(calibrationProvider.notifier).updateCalibration(adc, karat, cal.tolerance);
+                        setState(() => _isExpanded = false);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Calibration saved: ${karat}k at ${nf.NumberFormat.formatADC(adc.toInt())} ADC'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                      child: Text(
+                        'Confirm & Save',
+                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+
+                  // Live preview
+                  const SizedBox(height: 12),
+                  Text(
+                    'Live Range Preview',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(100),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ...cal.karatRanges.take(3).map((r) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: r.color,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${r.karat}k',
+                          style: GoogleFonts.inter(
+                            color: Colors.white.withAlpha(130),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          nf.NumberFormat.formatADCRange(r.min, r.max),
+                          style: GoogleFonts.inter(
+                            color: Colors.white.withAlpha(100),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildKaratDropdown() {
-    return DropdownButtonFormField<int>(
-      value: _selectedKarat,
-      dropdownColor: const Color(0xFF2A2A2A),
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: 'Karat',
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-        filled: true,
-        fillColor: const Color(0xFF1A1A1A),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      items: [24, 22, 18, 14, 10, 9].map((k) {
-        return DropdownMenuItem(
-          value: k,
-          child: Text('${k}k'),
-        );
-      }).toList(),
-      onChanged: (v) {
-        if (v != null) setState(() => _selectedKarat = v);
-      },
-    );
-  }
+  void _calibrateFromSample() async {
+    setState(() => _isCalibrating = true);
 
-  Widget _buildADCField() {
-    return TextField(
-      controller: _adcController,
-      keyboardType: TextInputType.number,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: 'ADC Value',
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-        filled: true,
-        fillColor: const Color(0xFF1A1A1A),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
+    final bt = ref.read(btProvider);
+    final meanADC = await bt.startCalibration();
 
-  Widget _buildLivePreview() {
-    final cal = ref.read(calibrationProvider);
-    final adc = double.tryParse(_adcController.text) ?? cal.anchorADC;
-    final ranges = RangeCalculator.computeKaratRanges(adc, _selectedKarat, cal.tolerance);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Preview ranges:',
-          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
-        ),
-        const SizedBox(height: 8),
-        ...ranges.take(4).map((r) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            children: [
-              Container(width: 10, height: 10, decoration: BoxDecoration(color: r.color, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(width: 8),
-              Text('${r.karat}k', style: const TextStyle(color: Colors.white, fontSize: 12)),
-              const Spacer(),
-              Text('${r.min.toStringAsFixed(0)} – ${r.max.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-          ),
-        )),
-      ],
-    );
-  }
-
-  void _startCalibration() {
-    ref.read(purityTestProvider.notifier).startCalibration();
-  }
-
-  void _confirmAndSave() {
-    final adc = ref.read(purityTestProvider).calibrationProgress;
-    if (adc != null && adc > 0) {
-      ref.read(calibrationProvider.notifier).updateCalibration(adc.toDouble(), _selectedKarat, 800);
-      ref.read(soundServiceProvider).play(SoundEffect.clickStep);
-      setState(() => _expanded = false);
-      _showToast('Calibration saved');
+    if (mounted) {
+      setState(() {
+        _isCalibrating = false;
+        _adcController.text = nf.NumberFormat.formatADC(meanADC);
+      });
     }
-  }
-
-  void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 }

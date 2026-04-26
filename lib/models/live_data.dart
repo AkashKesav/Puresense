@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'purity_calculation_method.dart';
+import '../utils/statistical_classifier.dart';
 
 enum PurityOutcome { gold, notGold, probeInAir, unknown }
 
@@ -17,6 +19,7 @@ class LiveData {
 class KaratRange {
   final int karat;
   final String label;
+  final double expectedADC;
   final double min;
   final double max;
   final Color color;
@@ -24,6 +27,7 @@ class KaratRange {
   KaratRange({
     required this.karat,
     required this.label,
+    required this.expectedADC,
     required this.min,
     required this.max,
     required this.color,
@@ -77,6 +81,10 @@ class PurityResult {
   final MetalMatch? detectedMetal;
   final List<MetalMatch> otherMatches;
   final DateTime timestamp;
+  final PurityCalculationMethod calculationMethod;
+
+  /// Statistical analysis result (only present when slope method is used)
+  final StatisticalResult? statisticalResult;
 
   PurityResult({
     required this.outcome,
@@ -89,6 +97,8 @@ class PurityResult {
     this.detectedMetal,
     required this.otherMatches,
     required this.timestamp,
+    this.calculationMethod = PurityCalculationMethod.standardMean,
+    this.statisticalResult,
   });
 
   String get historyLabel {
@@ -127,7 +137,8 @@ class DensityResult {
     required this.timestamp,
   });
 
-  String get historyLabel => 'Density Test — $metalLabel ${density.toStringAsFixed(2)} g/cm³';
+  String get historyLabel =>
+      'Density Test — $metalLabel ${density.toStringAsFixed(2)} g/cm³';
 }
 
 class FullAnalysisResult {

@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.puresense.puresense"
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 33
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

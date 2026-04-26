@@ -1,85 +1,112 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/purity_calculation_method.dart';
 
 class SettingsState {
   final bool soundEnabled;
   final double volume;
-  final bool autoReconnect;
   final bool showLiveChart;
-  final String themeMode;
+  final bool autoReconnect;
+  final PurityCalculationMethod calculationMethod;
 
-  SettingsState({
+  const SettingsState({
     this.soundEnabled = true,
     this.volume = 0.8,
-    this.autoReconnect = true,
     this.showLiveChart = true,
-    this.themeMode = 'dark',
+    this.autoReconnect = true,
+    this.calculationMethod = PurityCalculationMethod.standardMean,
   });
+
+  bool get useStatisticalMethod =>
+      calculationMethod != PurityCalculationMethod.standardMean;
 
   SettingsState copyWith({
     bool? soundEnabled,
     double? volume,
-    bool? autoReconnect,
     bool? showLiveChart,
-    String? themeMode,
+    bool? autoReconnect,
+    PurityCalculationMethod? calculationMethod,
   }) {
     return SettingsState(
       soundEnabled: soundEnabled ?? this.soundEnabled,
       volume: volume ?? this.volume,
-      autoReconnect: autoReconnect ?? this.autoReconnect,
       showLiveChart: showLiveChart ?? this.showLiveChart,
-      themeMode: themeMode ?? this.themeMode,
+      autoReconnect: autoReconnect ?? this.autoReconnect,
+      calculationMethod: calculationMethod ?? this.calculationMethod,
     );
   }
 }
 
 class SettingsNotifier extends StateNotifier<SettingsState> {
-  SettingsNotifier() : super(SettingsState()) {
+  SettingsNotifier() : super(const SettingsState()) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = state.copyWith(
-      soundEnabled: prefs.getBool('sound_enabled') ?? true,
-      volume: prefs.getDouble('sound_volume') ?? 0.8,
-      autoReconnect: prefs.getBool('auto_reconnect') ?? true,
-      showLiveChart: prefs.getBool('show_live_chart') ?? true,
-      themeMode: prefs.getString('theme_mode') ?? 'dark',
+    final storedMethod = PurityCalculationMethodX.fromPrefsValue(
+      prefs.getString('purityCalculationMethod'),
+    );
+    final legacyStatistical = prefs.getBool('useStatisticalMethod') ?? false;
+
+    state = SettingsState(
+      soundEnabled: prefs.getBool('soundEnabled') ?? true,
+      volume: prefs.getDouble('volume') ?? 0.8,
+      showLiveChart: prefs.getBool('showLiveChart') ?? true,
+      autoReconnect: prefs.getBool('autoReconnect') ?? true,
+      calculationMethod: storedMethod ??
+          (legacyStatistical
+              ? PurityCalculationMethod.detrendedSlope
+              : PurityCalculationMethod.standardMean),
     );
   }
 
   Future<void> setSoundEnabled(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('sound_enabled', v);
     state = state.copyWith(soundEnabled: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('soundEnabled', v);
   }
 
   Future<void> setVolume(double v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('sound_volume', v);
     state = state.copyWith(volume: v);
-  }
-
-  Future<void> setAutoReconnect(bool v) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('auto_reconnect', v);
-    state = state.copyWith(autoReconnect: v);
+    await prefs.setDouble('volume', v);
   }
 
   Future<void> setShowLiveChart(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('show_live_chart', v);
     state = state.copyWith(showLiveChart: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('showLiveChart', v);
   }
 
-  Future<void> setThemeMode(String v) async {
+  Future<void> setAutoReconnect(bool v) async {
+    state = state.copyWith(autoReconnect: v);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('theme_mode', v);
-    state = state.copyWith(themeMode: v);
+    await prefs.setBool('autoReconnect', v);
+  }
+
+  Future<void> setPurityCalculationMethod(
+    PurityCalculationMethod method,
+  ) async {
+    state = state.copyWith(calculationMethod: method);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('purityCalculationMethod', method.prefsValue);
+    await prefs.setBool(
+      'useStatisticalMethod',
+      method != PurityCalculationMethod.standardMean,
+    );
+  }
+
+  Future<void> setUseStatisticalMethod(bool v) async {
+    await setPurityCalculationMethod(
+      v
+          ? PurityCalculationMethod.detrendedSlope
+          : PurityCalculationMethod.standardMean,
+    );
   }
 }
 
-final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
+final settingsProvider =
+    StateNotifierProvider<SettingsNotifier, SettingsState>((ref) {
   return SettingsNotifier();
 });

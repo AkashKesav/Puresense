@@ -1,16 +1,37 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/bluetooth_service.dart';
+import 'settings_provider.dart';
 
+/// Provides the BluetoothService singleton
 final btProvider = Provider<BluetoothService>((ref) {
   final bt = BluetoothService();
-  ref.onDispose(() => bt.dispose());
+  bt.setAutoReconnectEnabled(ref.read(settingsProvider).autoReconnect);
+  ref.listen<SettingsState>(settingsProvider, (_, next) {
+    bt.setAutoReconnectEnabled(next.autoReconnect);
+  });
   return bt;
 });
 
-final btStatusProvider = StreamProvider<BtStatus>((ref) async* {
+/// Reactive stream provider for BtStatus changes (no polling)
+final btStatusProvider = StreamProvider<BtStatus>((ref) {
   final bt = ref.watch(btProvider);
-  yield bt.status.value;
-  await for (final _ in Stream.periodic(const Duration(milliseconds: 500))) {
-    yield bt.status.value;
-  }
+  // Convert ValueNotifier to a proper Stream
+  return Stream.multi((controller) {
+    void listener() {
+      controller.add(bt.status.value);
+    }
+
+    bt.status.addListener(listener);
+    // Emit current value immediately
+    controller.add(bt.status.value);
+    controller.onCancel = () {
+      bt.status.removeListener(listener);
+    };
+  });
+});
+
+/// Reactive stream provider for ProbeStatus
+final probeStatusProvider = StreamProvider<ProbeStatus>((ref) {
+  final bt = ref.watch(btProvider);
+  return bt.probeStatusStream;
 });

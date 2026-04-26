@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class DensityReferenceTable extends StatelessWidget {
   final String? highlightedLabel;
@@ -21,24 +22,30 @@ class DensityReferenceTable extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withAlpha(10)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Text(
               'Density Reference Table',
-              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           ...data.map((row) {
             final isHighlighted = highlightedLabel != null &&
-                row['metal']!.toLowerCase().contains(highlightedLabel!.toLowerCase().split('/').first);
+                row['metal']!.toLowerCase().contains(
+                    highlightedLabel!.toLowerCase().split('/').first);
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isHighlighted ? const Color(0xFFFFB300).withOpacity(0.15) : null,
+                color: isHighlighted ? const Color(0xFFFFB300).withAlpha(15) : null,
                 border: isHighlighted
                     ? const Border(
                         left: BorderSide(color: Color(0xFFFFB300), width: 3),
@@ -49,7 +56,7 @@ class DensityReferenceTable extends StatelessWidget {
                 children: [
                   Text(
                     row['metal']!,
-                    style: TextStyle(
+                    style: GoogleFonts.inter(
                       color: isHighlighted ? const Color(0xFFFFB300) : Colors.white,
                       fontSize: 14,
                       fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w400,
@@ -57,9 +64,9 @@ class DensityReferenceTable extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    row['range']!,
-                    style: TextStyle(
-                      color: isHighlighted ? const Color(0xFFFFB300) : Colors.white70,
+                    '${row['range']!} g/cm³',
+                    style: GoogleFonts.inter(
+                      color: isHighlighted ? const Color(0xFFFFB300) : Colors.white.withAlpha(130),
                       fontSize: 14,
                     ),
                   ),
@@ -67,6 +74,7 @@ class DensityReferenceTable extends StatelessWidget {
               ),
             );
           }),
+          const SizedBox(height: 8),
         ],
       ),
     );

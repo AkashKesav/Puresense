@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'screens/splash_screen.dart';
 import 'screens/connection_screen.dart';
@@ -28,14 +27,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/purity',
       builder: (context, state) {
-        final mode = state.uri.queryParameters['mode'];
+        final mode = state.uri.queryParameters['mode'] ?? 'standalone';
         return PurityTestScreen(mode: mode);
       },
     ),
     GoRoute(
       path: '/density',
       builder: (context, state) {
-        final mode = state.uri.queryParameters['mode'];
+        final mode = state.uri.queryParameters['mode'] ?? 'standalone';
         return DensityTestScreen(mode: mode);
       },
     ),

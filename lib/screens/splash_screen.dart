@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -9,30 +12,62 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _fadeController;
+  late final AnimationController _particleController;
+  late final Animation<double> _fadeIn;
+  late final Animation<double> _taglineFade;
+  late final List<_Particle> _particles;
+  final _random = Random();
+  Timer? _navigationTimer;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1800),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 1800), () {
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _fadeIn = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _taglineFade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _fadeController,
+        curve: const Interval(0.4, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat();
+
+    // Generate scattered particles
+    _particles = List.generate(
+        40,
+        (_) => _Particle(
+              x: _random.nextDouble(),
+              y: _random.nextDouble(),
+              size: _random.nextDouble() * 3 + 1,
+              speed: _random.nextDouble() * 0.3 + 0.1,
+              opacity: _random.nextDouble() * 0.6 + 0.1,
+              delay: _random.nextDouble(),
+            ));
+
+    _fadeController.forward();
+
+    // Navigate after 1.8s
+    _navigationTimer = Timer(const Duration(milliseconds: 1800), () {
       if (mounted) context.go('/connect');
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _navigationTimer?.cancel();
+    _fadeController.dispose();
+    _particleController.dispose();
     super.dispose();
   }
 
@@ -43,37 +78,87 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background particles
-          ...List.generate(12, (i) => _Particle(delay: i * 0.15)),
+          // Radial gradient glow
+          Center(
+            child: Container(
+              width: 400,
+              height: 400,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFFFB300).withAlpha(18),
+                    const Color(0xFFFFB300).withAlpha(5),
+                    Colors.transparent,
+                  ],
+                  stops: const [0, 0.5, 1],
+                ),
+              ),
+            ),
+          ),
 
-          // Center content
+          // Floating particles
+          AnimatedBuilder(
+            animation: _particleController,
+            builder: (context, child) {
+              return CustomPaint(
+                painter: _ParticlePainter(
+                  particles: _particles,
+                  progress: _particleController.value,
+                ),
+                size: Size.infinite,
+              );
+            },
+          ),
+
+          // Main content
           Center(
             child: FadeTransition(
-              opacity: _fadeAnimation,
+              opacity: _fadeIn,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Gold shimmer wordmark
                   Shimmer.fromColors(
                     baseColor: const Color(0xFFFFB300),
                     highlightColor: const Color(0xFFFFD700),
-                    period: const Duration(milliseconds: 1500),
-                    child: const Text(
+                    period: const Duration(milliseconds: 2000),
+                    child: Text(
                       'PureSense',
-                      style: TextStyle(
-                        color: Color(0xFFFFB300),
-                        fontSize: 48,
+                      style: GoogleFonts.inter(
+                        fontSize: 42,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 4,
+                        letterSpacing: -1,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Precision metal analysis',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 16,
-                      letterSpacing: 2,
+                  const SizedBox(height: 12),
+                  // Tagline
+                  FadeTransition(
+                    opacity: _taglineFade,
+                    child: Text(
+                      'Precision metal analysis',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withAlpha(130),
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 48),
+                  // Subtle loading indicator
+                  FadeTransition(
+                    opacity: _taglineFade,
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(
+                          const Color(0xFFFFB300).withAlpha(120),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -86,65 +171,48 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 }
 
-class _Particle extends StatefulWidget {
-  final double delay;
-  const _Particle({required this.delay});
-
-  @override
-  State<_Particle> createState() => _ParticleState();
+// ─── Particle model ───
+class _Particle {
+  final double x, y, size, speed, opacity, delay;
+  const _Particle({
+    required this.x,
+    required this.y,
+    required this.size,
+    required this.speed,
+    required this.opacity,
+    required this.delay,
+  });
 }
 
-class _ParticleState extends State<_Particle> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _anim;
+// ─── Particle painter ───
+class _ParticlePainter extends CustomPainter {
+  final List<_Particle> particles;
+  final double progress;
+
+  _ParticlePainter({required this.particles, required this.progress});
 
   @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    );
-    _anim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-    Future.delayed(Duration(milliseconds: (widget.delay * 1000).toInt()), () {
-      if (mounted) _ctrl.repeat(reverse: true);
-    });
+  void paint(Canvas canvas, Size size) {
+    for (final p in particles) {
+      final adjustedProgress = (progress + p.delay) % 1.0;
+      final y = (p.y + adjustedProgress * p.speed) % 1.0;
+      final fadeMultiplier = sin(adjustedProgress * pi);
+
+      final paint = Paint()
+        ..color = const Color(0xFFFFB300).withAlpha(
+          (p.opacity * fadeMultiplier * 255).toInt().clamp(0, 255),
+        )
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1);
+
+      canvas.drawCircle(
+        Offset(p.x * size.width, y * size.height),
+        p.size,
+        paint,
+      );
+    }
   }
 
   @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final random = widget.delay * 100;
-    final x = (random % size.width).abs();
-    final y = ((random * 7) % size.height).abs();
-
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (context, child) {
-        return Positioned(
-          left: x,
-          top: y - _anim.value * 30,
-          child: Opacity(
-            opacity: 0.3 + _anim.value * 0.4,
-            child: Container(
-              width: 3 + (random % 4),
-              height: 3 + (random % 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFB300),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
+  bool shouldRepaint(covariant _ParticlePainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

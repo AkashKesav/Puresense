@@ -27,15 +27,28 @@ class SoundService {
   Future<void> init() async {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
-    _soundEnabled = prefs.getBool('sound_enabled') ?? true;
-    _volume = prefs.getDouble('sound_volume') ?? 0.8;
+    _soundEnabled =
+        prefs.getBool('soundEnabled') ?? prefs.getBool('sound_enabled') ?? true;
+    _volume =
+        prefs.getDouble('volume') ?? prefs.getDouble('sound_volume') ?? 0.8;
     _initialized = true;
   }
 
   Future<void> play(SoundEffect effect) async {
-    if (!_soundEnabled || !_initialized) return;
+    if (!_initialized) {
+      await init();
+    }
+    if (!_soundEnabled) return;
     final source = AssetSource(_mapEffectToPath(effect));
     await _player.play(source, volume: _volume);
+  }
+
+  void applySettings({
+    required bool soundEnabled,
+    required double volume,
+  }) {
+    _soundEnabled = soundEnabled;
+    _volume = volume.clamp(0.0, 1.0);
   }
 
   String _mapEffectToPath(SoundEffect effect) {
@@ -60,12 +73,14 @@ class SoundService {
   Future<void> setEnabled(bool enabled) async {
     _soundEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('soundEnabled', enabled);
     await prefs.setBool('sound_enabled', enabled);
   }
 
   Future<void> setVolume(double vol) async {
     _volume = vol.clamp(0.0, 1.0);
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('volume', _volume);
     await prefs.setDouble('sound_volume', _volume);
   }
 

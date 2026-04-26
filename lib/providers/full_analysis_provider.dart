@@ -3,62 +3,49 @@ import '../models/live_data.dart';
 
 class FullAnalysisState {
   final bool isFullAnalysisMode;
-  final DensityResult? densityResult;
-  final PurityResult? purityResult;
-  final bool showHandoffSheet;
+  final DensityResult? density;
+  final PurityResult? purity;
 
-  FullAnalysisState({
+  const FullAnalysisState({
     this.isFullAnalysisMode = false,
-    this.densityResult,
-    this.purityResult,
-    this.showHandoffSheet = false,
+    this.density,
+    this.purity,
   });
 
   FullAnalysisState copyWith({
     bool? isFullAnalysisMode,
-    DensityResult? densityResult,
-    PurityResult? purityResult,
-    bool? showHandoffSheet,
-    bool clearDensity = false,
-    bool clearPurity = false,
+    DensityResult? density,
+    PurityResult? purity,
   }) {
     return FullAnalysisState(
       isFullAnalysisMode: isFullAnalysisMode ?? this.isFullAnalysisMode,
-      densityResult: clearDensity ? null : (densityResult ?? this.densityResult),
-      purityResult: clearPurity ? null : (purityResult ?? this.purityResult),
-      showHandoffSheet: showHandoffSheet ?? this.showHandoffSheet,
+      density: density ?? this.density,
+      purity: purity ?? this.purity,
     );
   }
 }
 
 class FullAnalysisNotifier extends StateNotifier<FullAnalysisState> {
-  FullAnalysisNotifier() : super(FullAnalysisState());
+  FullAnalysisNotifier() : super(const FullAnalysisState());
 
   void startFullAnalysis() {
-    state = FullAnalysisState(isFullAnalysisMode: true);
+    state = const FullAnalysisState(isFullAnalysisMode: true);
   }
 
   void setDensityResult(DensityResult result) {
-    state = state.copyWith(densityResult: result, showHandoffSheet: true);
-  }
-
-  void dismissHandoff() {
-    state = state.copyWith(showHandoffSheet: false);
+    state = state.copyWith(density: result);
   }
 
   void setPurityResult(PurityResult result) {
-    state = state.copyWith(purityResult: result);
-  }
-
-  void finish() {
-    state = state.copyWith(isFullAnalysisMode: false, clearDensity: true, clearPurity: true);
+    state = state.copyWith(purity: result);
   }
 
   void reset() {
-    state = FullAnalysisState();
+    state = const FullAnalysisState();
   }
 }
 
-final fullAnalysisProvider = StateNotifierProvider<FullAnalysisNotifier, FullAnalysisState>((ref) {
+final fullAnalysisProvider =
+    StateNotifierProvider<FullAnalysisNotifier, FullAnalysisState>((ref) {
   return FullAnalysisNotifier();
 });

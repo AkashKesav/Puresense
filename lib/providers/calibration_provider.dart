@@ -1,8 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/live_data.dart';
-import '../services/sound_service.dart';
 import '../utils/range_calculator.dart';
 
 class CalibrationState {
@@ -43,9 +41,9 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
   }
 
   static CalibrationState _defaultState() {
-    const anchorADC = 22000.0;
-    const anchorKarat = 24;
-    const tolerance = 800.0;
+    const anchorADC = -1500.0;
+    const anchorKarat = 22;
+    const tolerance = 50.0;
     return CalibrationState(
       anchorADC: anchorADC,
       anchorKarat: anchorKarat,
@@ -57,9 +55,9 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final adc = prefs.getDouble('anchor_adc') ?? 22000.0;
-    final karat = prefs.getInt('anchor_karat') ?? 24;
-    final tol = prefs.getDouble('tolerance') ?? 800.0;
+    final adc = prefs.getDouble('anchor_adc') ?? -1500.0;
+    final karat = prefs.getInt('anchor_karat') ?? 22;
+    final tol = prefs.getDouble('tolerance') ?? 50.0;
     updateCalibration(adc, karat, tol);
   }
 
@@ -86,7 +84,7 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
   }
 
   Future<void> resetToDefaults() async {
-    await updateCalibration(22000.0, 24, 800.0);
+    await updateCalibration(-1500.0, 22, 50.0);
   }
 }
 

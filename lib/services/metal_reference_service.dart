@@ -33,7 +33,6 @@ class MetalReferenceService {
 
   List<MetalRange> _getBaseRanges(double goldReferenceADC) {
     final references = [
-      {'name': 'Platinum', 'expected': 26000.0, 'color': 0xFFE5E4E2, 'density': 21.45, 'desc': 'Noble metal, highly corrosion resistant'},
       {'name': 'Gold 24k', 'expected': 22000.0, 'color': 0xFFFFD700, 'density': 19.32, 'desc': 'Pure gold (99.9%)'},
       {'name': 'Gold 22k', 'expected': 20167.0, 'color': 0xFFFFB300, 'density': 17.8, 'desc': '91.7% gold content'},
       {'name': 'Gold 18k', 'expected': 16500.0, 'color': 0xFFFFA000, 'density': 15.6, 'desc': '75.0% gold content'},

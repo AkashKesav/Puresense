@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:csv/csv.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/history_provider.dart';
-import '../widgets/live_data_bar.dart';
+import '../models/live_data.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -16,19 +13,21 @@ class HistoryScreen extends ConsumerStatefulWidget {
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   String _filter = 'All';
+  final _filters = ['All', 'Full Analysis', 'Density', 'Purity', 'Metal ID'];
 
   @override
   Widget build(BuildContext context) {
-    final history = ref.watch(historyProvider);
-
+    final entries = ref.watch(historyProvider);
     final filtered = _filter == 'All'
-        ? history
-        : history.where((e) {
-            if (_filter == 'Full Analysis') return e.type == 'full';
-            if (_filter == 'Density') return e.type == 'density';
-            if (_filter == 'Purity') return e.type == 'purity';
-            if (_filter == 'Metal ID') return e.type == 'metalId';
-            return true;
+        ? entries
+        : entries.where((e) {
+            switch (_filter) {
+              case 'Full Analysis': return e.type == 'fullAnalysis';
+              case 'Density': return e.type == 'density';
+              case 'Purity': return e.type == 'purity';
+              case 'Metal ID': return e.type == 'metalId';
+              default: return true;
+            }
           }).toList();
 
     return Scaffold(
@@ -36,132 +35,224 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
-        title: const Text(
+        title: Text(
           'History',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         actions: [
-          TextButton.icon(
-            onPressed: () => _exportCSV(history),
-            icon: const Icon(Icons.download, size: 18),
-            label: const Text('Export CSV', style: TextStyle(fontSize: 12)),
-          ),
+          if (entries.isNotEmpty)
+            TextButton.icon(
+              onPressed: () => _exportCSV(entries),
+              icon: const Icon(Icons.download, size: 18),
+              label: Text(
+                'CSV',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
         ],
       ),
       body: Column(
         children: [
           // Filter chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: ['All', 'Full Analysis', 'Density', 'Purity', 'Metal ID'].map((f) {
-                final selected = _filter == f;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(f),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _filter = f),
-                    backgroundColor: const Color(0xFF222222),
-                    selectedColor: const Color(0xFFFFB300),
-                    labelStyle: TextStyle(
-                      color: selected ? Colors.black : Colors.white70,
-                      fontSize: 12,
+          SizedBox(
+            height: 44,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _filters.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final filter = _filters[index];
+                final isActive = _filter == filter;
+                return GestureDetector(
+                  onTap: () => setState(() => _filter = filter),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? const Color(0xFFFFB300).withAlpha(25)
+                          : const Color(0xFF222222),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isActive
+                            ? const Color(0xFFFFB300)
+                            : Colors.white.withAlpha(20),
+                      ),
+                    ),
+                    child: Text(
+                      filter,
+                      style: GoogleFonts.inter(
+                        color: isActive
+                            ? const Color(0xFFFFB300)
+                            : Colors.white.withAlpha(130),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 );
-              }).toList(),
+              },
             ),
           ),
+          const SizedBox(height: 12),
+
+          // Entries list
           Expanded(
             child: filtered.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.history, size: 64, color: Colors.white.withOpacity(0.2)),
+                        Icon(Icons.history,
+                            size: 48, color: Colors.white.withAlpha(40)),
                         const SizedBox(height: 16),
                         Text(
-                          'No history yet',
-                          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 16),
+                          'No test results yet',
+                          style: GoogleFonts.inter(
+                            color: Colors.white.withAlpha(100),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Complete a test to see it here',
+                          style: GoogleFonts.inter(
+                            color: Colors.white.withAlpha(60),
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
                   )
-                : ListView.builder(
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
-                      final entry = filtered[index];
+                      final entry = filtered[filtered.length - 1 - index];
                       return Dismissible(
-                        key: Key(entry.id),
+                        key: ValueKey(entry.timestamp),
                         direction: DismissDirection.endToStart,
                         background: Container(
-                          color: Colors.red,
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.only(right: 20),
-                          child: const Icon(Icons.delete, color: Colors.white),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withAlpha(40),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.delete, color: Colors.red),
                         ),
                         onDismissed: (_) {
                           ref.read(historyProvider.notifier).deleteEntry(entry.id);
                         },
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF222222),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ExpansionTile(
-                            title: Text(
-                              entry.label,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Text(
-                              DateFormat('MMM d, yyyy HH:mm').format(entry.timestamp),
-                              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                            ),
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                                child: Text(
-                                  entry.result.toString(),
-                                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        child: _HistoryCard(entry: entry),
                       );
                     },
                   ),
           ),
-          const LiveDataBar(),
         ],
       ),
     );
   }
 
-  Future<void> _exportCSV(List<dynamic> entries) async {
-    final rows = <List<String>>[
-      ['ID', 'Type', 'Label', 'Result', 'Timestamp'],
-    ];
-    for (final entry in entries) {
-      rows.add([
-        entry.id,
-        entry.type,
-        entry.label,
-        entry.result.toString(),
-        DateFormat('yyyy-MM-dd HH:mm:ss').format(entry.timestamp),
-      ]);
+  void _exportCSV(List<HistoryEntry> entries) async {
+    try {
+      final path = await ref.read(historyProvider.notifier).exportToCsv();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Exported to $path')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
     }
-    final csv = const ListToCsvConverter().convert(rows);
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/puresense_history.csv');
-    await file.writeAsString(csv);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved to ${file.path}')),
-      );
-    }
+  }
+}
+
+class _HistoryCard extends StatelessWidget {
+  final dynamic entry;
+  const _HistoryCard({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final iconMap = {
+      'fullAnalysis': '🏆',
+      'density': '⚖️',
+      'purity': '🔬',
+      'metalId': '🔬',
+    };
+
+    final colorMap = {
+      'fullAnalysis': const Color(0xFFFFB300),
+      'density': Colors.blue,
+      'purity': Colors.green,
+      'metalId': Colors.purple,
+    };
+
+    final emoji = iconMap[entry.type] ?? '📊';
+    final accent = colorMap[entry.type] ?? Colors.grey;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF222222),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withAlpha(10)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accent.withAlpha(20),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 20))),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.label ?? entry.type ?? 'Result',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatTimestamp(entry.timestamp),
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withAlpha(80),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, size: 20, color: Colors.white.withAlpha(40)),
+        ],
+      ),
+    );
+  }
+
+  String _formatTimestamp(DateTime ts) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[ts.month - 1]} ${ts.day}, ${ts.year}  ${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}';
   }
 }

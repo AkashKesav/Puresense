@@ -1,75 +1,174 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/live_data.dart';
-import '../providers/calibration_provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../providers/metal_reference_provider.dart';
 import '../providers/live_data_provider.dart';
 
 class NobleMetalScaleChart extends ConsumerWidget {
-  final void Function(MetalRange)? onTapSegment;
-  const NobleMetalScaleChart({super.key, this.onTapSegment});
+  const NobleMetalScaleChart({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cal = ref.watch(calibrationProvider);
+    final metalState = ref.watch(metalReferenceProvider);
     final liveAsync = ref.watch(liveDataProvider);
-    final adc = liveAsync.when(data: (d) => d.adcValue.toDouble(), loading: () => 0.0, error: (_, __) => 0.0);
+    final adc = liveAsync.when(data: (d) => d.adcValue, loading: () => 0, error: (_, __) => 0);
 
-    final metals = cal.metalRanges;
+    final metals = metalState.allMetals;
     if (metals.isEmpty) return const SizedBox.shrink();
 
-    final totalScale = 30000.0;
+    // Scale: -14000 (crude) to 0 (noble)
+    const scaleMin = -14000.0;
+    const scaleMax = 0.0;
+    const scaleRange = scaleMax - scaleMin; // 14000
 
     return Container(
-      height: 60,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Stack(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF222222),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withAlpha(10)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Stacked segments
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Row(
-              children: metals.map((metal) {
-                final width = (metal.max - metal.min) / totalScale;
-                return Expanded(
-                  flex: ((metal.max - metal.min) * 1000).toInt(),
-                  child: GestureDetector(
-                    onTap: () => onTapSegment?.call(metal),
-                    child: Container(
-                      color: metal.color.withOpacity(0.7),
-                      child: Center(
-                        child: Text(
-                          metal.metalName,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: metal.color.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                            fontSize: 8,
+          Row(
+            children: [
+              Text(
+                'Noble Metal Scale',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '← Crude   Noble →',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withAlpha(60),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final barWidth = constraints.maxWidth;
+
+              // Map ADC to position (more negative = left, less negative = right)
+              double adcToPos(double val) {
+                return ((val - scaleMin) / scaleRange * barWidth).clamp(0.0, barWidth);
+              }
+
+              final indicatorPos = adcToPos(adc.toDouble());
+              final showIndicator = adc <= 15000;
+
+              return Column(
+                children: [
+                  // ADC scale bar with metal segments
+                  SizedBox(
+                    height: 32,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        // Background
+                        Container(
+                          height: 32,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFF333333),
+                                Color(0xFF555555),
+                                Color(0xFFFFB300),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
+
+                        // Metal markers
+                        ...metals.map((metal) {
+                          final pos = adcToPos(metal.expectedADC);
+                          return Positioned(
+                            left: pos.clamp(0.0, barWidth - 3),
+                            top: 0,
+                            child: Tooltip(
+                              message: metal.metalName,
+                              child: Container(
+                                width: 3,
+                                height: 32,
+                                color: metal.color,
+                              ),
+                            ),
+                          );
+                        }),
+
+                        // Live indicator
+                        if (showIndicator)
+                          Positioned(
+                            left: (indicatorPos - 1).clamp(0.0, barWidth - 2),
+                            top: -6,
+                            child: Container(
+                              width: 3,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.white.withAlpha(100),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          // Live indicator line
-          Positioned(
-            left: (adc / totalScale).clamp(0.0, 1.0) * MediaQuery.of(context).size.width - 32,
-            top: 0,
-            bottom: 0,
-            child: Container(
-              width: 3,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFB300),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFFB300).withOpacity(0.5),
-                    blurRadius: 6,
-                    spreadRadius: 1,
+
+                  const SizedBox(height: 6),
+
+                  // Scale labels
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '-14k',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(60),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        '-10k',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(60),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        '-5k',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(60),
+                          fontSize: 10,
+                        ),
+                      ),
+                      Text(
+                        '0',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(60),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),

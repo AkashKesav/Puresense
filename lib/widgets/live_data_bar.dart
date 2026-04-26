@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/live_data_provider.dart';
-import '../services/bluetooth_service.dart';
+import '../utils/number_format.dart' as nf;
 
 class LiveDataBar extends ConsumerWidget {
   const LiveDataBar({super.key});
@@ -10,114 +11,195 @@ class LiveDataBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final liveAsync = ref.watch(liveDataProvider);
 
-    final weight = liveAsync.when(
-      data: (d) => d.weightGrams.toStringAsFixed(2),
-      loading: () => '--',
-      error: (_, __) => '--',
-    );
-    final adc = liveAsync.when(
-      data: (d) => d.adcValue.toString(),
-      loading: () => '--',
-      error: (_, __) => '--',
-    );
-    final probeStatus = liveAsync.when(
-      data: (d) => _probeStatusFromADC(d.adcValue),
-      loading: () => ProbeStatus.unknown,
-      error: (_, __) => ProbeStatus.unknown,
-    );
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
         border: Border(
-          top: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
+          top: BorderSide(color: Colors.white.withAlpha(15)),
         ),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.scale, color: Color(0xFFFFB300), size: 18),
-          const SizedBox(width: 6),
-          Text(
-            '$weight g',
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 16),
-          Container(width: 1, height: 16, color: Colors.white.withOpacity(0.2)),
-          const SizedBox(width: 16),
-          const Icon(Icons.bolt, color: Color(0xFFFFB300), size: 18),
-          const SizedBox(width: 6),
-          Text(
-            'ADC: $adc',
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const Spacer(),
-          _ProbeStatusDot(status: probeStatus),
-          const SizedBox(width: 8),
-          if (probeStatus == ProbeStatus.inAir)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFB300).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+      child: liveAsync.when(
+        data: (data) {
+          final isAir = data.adcValue > 18000;
+          final noSignal = data.adcValue < 500;
+
+          return Row(
+            children: [
+              // Weight
+              Text(
+                '⚖ ${nf.NumberFormat.formatWeight(data.weightGrams)} g',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withAlpha(200),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              child: const Text(
-                'Probe in air',
-                style: TextStyle(color: Color(0xFFFFB300), fontSize: 11, fontWeight: FontWeight.w600),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                width: 1,
+                height: 16,
+                color: Colors.white.withAlpha(25),
               ),
-            )
-          else if (probeStatus == ProbeStatus.noSignal)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+              // ADC
+              Text(
+                '⚡ ADC: ${nf.NumberFormat.formatADC(data.adcValue)}',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withAlpha(200),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              child: const Text(
-                'No signal',
-                style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w600),
+              const Spacer(),
+              // Probe status dot & badge
+              if (isAir)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB300).withAlpha(25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFB300),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Probe in air',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFFFB300),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (noSignal)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withAlpha(25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: Colors.grey,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'No signal',
+                        style: GoogleFonts.inter(
+                          color: Colors.grey,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _AnimatedStatusDot(),
+            ],
+          );
+        },
+        loading: () => Row(
+          children: [
+            Text(
+              '⚖ -- g   |   ⚡ ADC: --',
+              style: GoogleFonts.inter(
+                color: Colors.white.withAlpha(80),
+                fontSize: 13,
               ),
             ),
-        ],
+            const Spacer(),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha(80),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ),
+        error: (_, __) => Text(
+          'Sensor disconnected',
+          style: GoogleFonts.inter(
+            color: Colors.red.withAlpha(180),
+            fontSize: 13,
+          ),
+        ),
       ),
     );
   }
-
-  ProbeStatus _probeStatusFromADC(int adc) {
-    if (adc > 18000) return ProbeStatus.inAir;
-    if (adc < 500) return ProbeStatus.noSignal;
-    return ProbeStatus.contact;
-  }
 }
 
-class _ProbeStatusDot extends StatelessWidget {
-  final ProbeStatus status;
-  const _ProbeStatusDot({required this.status});
+class _AnimatedStatusDot extends StatefulWidget {
+  @override
+  State<_AnimatedStatusDot> createState() => _AnimatedStatusDotState();
+}
+
+class _AnimatedStatusDotState extends State<_AnimatedStatusDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    late final Color color;
-    switch (status) {
-      case ProbeStatus.inAir:
-        color = Colors.red;
-        break;
-      case ProbeStatus.contact:
-        color = const Color(0xFFFFB300);
-        break;
-      case ProbeStatus.noSignal:
-        color = Colors.grey;
-        break;
-      case ProbeStatus.unknown:
-        color = Colors.grey;
-        break;
-    }
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, __) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: Color.lerp(
+              const Color(0xFFFFB300).withAlpha(120),
+              const Color(0xFFFFB300),
+              _controller.value,
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFB300).withAlpha(
+                  (60 * _controller.value).toInt(),
+                ),
+                blurRadius: 6,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

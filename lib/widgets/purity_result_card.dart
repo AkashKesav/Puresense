@@ -1,324 +1,381 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/live_data.dart';
+import '../models/purity_calculation_method.dart';
 import '../providers/history_provider.dart';
+import '../providers/sound_provider.dart';
 import '../providers/purity_test_provider.dart';
+import '../services/sound_service.dart';
+import '../utils/number_format.dart' as nf;
 
-class PurityResultCard extends ConsumerWidget {
+class PurityResultCard extends ConsumerStatefulWidget {
   final PurityResult result;
   final bool isFullAnalysis;
   final VoidCallback? onContinue;
+  final VoidCallback? onReset;
 
   const PurityResultCard({
     super.key,
     required this.result,
     this.isFullAnalysis = false,
     this.onContinue,
+    this.onReset,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    switch (result.outcome) {
+  ConsumerState<PurityResultCard> createState() => _PurityResultCardState();
+}
+
+class _PurityResultCardState extends ConsumerState<PurityResultCard> {
+  bool _soundPlayed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _playSound());
+  }
+
+  void _playSound() {
+    if (_soundPlayed) return;
+    _soundPlayed = true;
+    final sound = ref.read(soundServiceProvider);
+    switch (widget.result.outcome) {
       case PurityOutcome.gold:
-        return _buildGoldResult(context, ref);
+        if (widget.result.karat == 24) {
+          sound.play(SoundEffect.chime24k);
+        } else {
+          sound.play(SoundEffect.chimeGold);
+        }
       case PurityOutcome.notGold:
-        return _buildNotGoldResult(context, ref);
+        sound.play(SoundEffect.beepNotGold);
       case PurityOutcome.probeInAir:
-        return _buildProbeInAirResult(context, ref);
-      default:
-        return _buildUnknownResult(context, ref);
+        sound.play(SoundEffect.beepProbeAir);
+      case PurityOutcome.unknown:
+        sound.play(SoundEffect.beepNotGold);
     }
   }
 
-  Widget _buildGoldResult(BuildContext context, WidgetRef ref) {
+  @override
+  Widget build(BuildContext context) {
+    switch (widget.result.outcome) {
+      case PurityOutcome.gold:
+        return _buildGoldResult(context);
+      case PurityOutcome.notGold:
+        return _buildNotGoldResult(context);
+      case PurityOutcome.probeInAir:
+        return _buildProbeInAirResult(context);
+      case PurityOutcome.unknown:
+        return _buildNotGoldResult(context);
+    }
+  }
+
+  Widget _buildGoldResult(BuildContext context) {
+    final r = widget.result;
+    final pct =
+        r.purityPercent ?? (r.karat != null ? (r.karat! / 24.0) * 100 : 0);
+
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFB300).withOpacity(0.5), width: 2),
+        border:
+            Border.all(color: const Color(0xFFFFB300).withAlpha(100), width: 2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 28),
-              const SizedBox(width: 12),
+              const Icon(Icons.check_circle,
+                  color: Color(0xFFFFB300), size: 24),
+              const SizedBox(width: 10),
               Text(
-                result.karat == 24 ? 'PURE GOLD DETECTED' : 'GOLD DETECTED',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                'GOLD DETECTED',
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFFFB300),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          _buildResultRow('Purity:', '${result.karat}k (${result.purityPercent?.toStringAsFixed(1)}% pure gold)'),
-          _buildResultRow('ADC:', result.meanADC.toString()),
-          _buildResultRow('Zone:', '${result.karat}k Gold Range'),
+          _row('Purity:',
+              '${r.karat}k  (${nf.NumberFormat.formatPercent(pct)}% pure gold)'),
+          _row('ADC:', nf.NumberFormat.formatADC(r.meanADC)),
+          _row('Zone:', '${r.karat}k Gold Range'),
           const SizedBox(height: 20),
-          const Text(
+
+          // Distribution bar
+          Text(
             'Sample Distribution',
-            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+            style: GoogleFonts.inter(
+              color: Colors.white.withAlpha(130),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 8),
-          _buildDistributionBar(result.distributionGold, result.distributionLeft, result.distributionRight),
-          const SizedBox(height: 20),
-          if (isFullAnalysis)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onContinue,
-                child: const Text('View Combined Result →'),
+          _buildDistributionBar(
+              r.distributionGold, r.distributionLeft, r.distributionRight),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(
+                'Gold Zone: ${r.distributionGold}%',
+                style: GoogleFonts.inter(
+                    color: const Color(0xFFFFB300), fontSize: 12),
               ),
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => ref.read(purityTestProvider.notifier).clearResult(),
-                    child: const Text('Test Again'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _saveResult(ref),
-                    child: const Text('Save Result'),
-                  ),
-                ),
-              ],
-            ),
+              const Spacer(),
+              Text(
+                'Below: ${r.distributionLeft}%    Above: ${r.distributionRight}%',
+                style: GoogleFonts.inter(
+                    color: Colors.white.withAlpha(80), fontSize: 12),
+              ),
+            ],
+          ),
+
+          // Statistical analysis details (drift-aware methods)
+          if (r.statisticalResult != null) _buildStatisticalInfo(r),
+
+          const SizedBox(height: 24),
+          _buildActionButtons(context),
         ],
       ),
     );
   }
 
-  Widget _buildNotGoldResult(BuildContext context, WidgetRef ref) {
-    final detected = result.detectedMetal;
-    final hasGoodMatch = detected != null && detected.confidence >= 40;
+  Widget _buildNotGoldResult(BuildContext context) {
+    final r = widget.result;
+    final best = r.detectedMetal;
 
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withOpacity(0.5), width: 2),
+        border: Border.all(color: Colors.grey.withAlpha(80), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.cancel, color: Colors.red, size: 28),
-              SizedBox(width: 12),
+              const Icon(Icons.cancel, color: Colors.grey, size: 24),
+              const SizedBox(width: 10),
               Text(
                 'NOT GOLD',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                style: GoogleFonts.inter(
+                  color: Colors.grey,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          _buildResultRow('ADC Reading:', result.meanADC.toString()),
           const SizedBox(height: 16),
-          if (hasGoodMatch) ...[
+          _row('ADC Reading:', nf.NumberFormat.formatADC(r.meanADC)),
+          const SizedBox(height: 16),
+
+          // Detected metal
+          if (best != null && best.confidence >= 40) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: detected.metal.color.withOpacity(0.15),
+                color: best.metal.color.withAlpha(20),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'DETECTED METAL',
-                    style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(130),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Container(
-                        width: 16,
-                        height: 16,
+                        width: 14,
+                        height: 14,
                         decoration: BoxDecoration(
-                          color: detected.metal.color,
-                          borderRadius: BorderRadius.circular(4),
+                          color: best.metal.color,
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Text(
-                        detected.metal.metalName,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                        best.metal.metalName,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Confidence: ${detected.confidence.toStringAsFixed(0)}%',
-                    style: const TextStyle(color: Color(0xFFFFB300), fontSize: 14),
+                    'Confidence: ${best.confidence.toStringAsFixed(0)}%',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFFFB300),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   Text(
-                    'Expected ADC: ${detected.metal.expectedADC.toStringAsFixed(0)} (±${((detected.metal.max - detected.metal.min) / 2).toStringAsFixed(0)})',
-                    style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                    'Expected ADC: ${nf.NumberFormat.formatADC(best.metal.expectedADC.toInt())}  (+/-${((best.metal.max - best.metal.min) / 2).toStringAsFixed(0)})',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(100),
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
             ),
           ] else ...[
-            const Text(
-              'Unknown metal or alloy',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            Text(
-              'Signal does not match any known reference',
-              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-            ),
-          ],
-          if (result.otherMatches.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Other possible matches:',
-              style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            ...result.otherMatches.take(3).map((m) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha(15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: m.metal.color,
-                      borderRadius: BorderRadius.circular(2),
+                  Text(
+                    'Unknown metal or alloy',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    m.metal.metalName,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${m.confidence.toStringAsFixed(0)}% confidence',
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                    r.meanADC < 500
+                        ? 'No signal - poor probe contact.\nClean the probe tip and try again.'
+                        : 'Signal does not match any known reference.',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(100),
+                      fontSize: 13,
+                    ),
                   ),
                 ],
               ),
-            )),
+            ),
           ],
-          const SizedBox(height: 20),
+
+          // Other matches
+          if (r.otherMatches.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Other possible matches:',
+              style: GoogleFonts.inter(
+                color: Colors.white.withAlpha(120),
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...r.otherMatches.take(3).map((m) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: m.metal.color,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        m.metal.metalName,
+                        style: GoogleFonts.inter(
+                            color: Colors.white, fontSize: 13),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${m.confidence.toStringAsFixed(0)}% confidence',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(80),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+
+          // Statistical analysis details (drift-aware methods)
+          if (r.statisticalResult != null) _buildStatisticalInfo(r),
+
+          const SizedBox(height: 24),
+          _buildNotGoldActions(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProbeInAirResult(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF222222),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: const Color(0xFFFFB300).withAlpha(80), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => ref.read(purityTestProvider.notifier).clearResult(),
-                  child: const Text('Test Again'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _saveResult(ref),
-                  child: const Text('Save'),
+              const Icon(Icons.warning_amber,
+                  color: Color(0xFFFFB300), size: 24),
+              const SizedBox(width: 10),
+              Text(
+                'PROBE IN AIR',
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFFFB300),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProbeInAirResult(BuildContext context, WidgetRef ref) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF332200),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFB300), width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Icon(Icons.warning_amber, color: Color(0xFFFFB300), size: 48),
           const SizedBox(height: 12),
-          const Text(
-            'No sample detected on probe',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
           Text(
-            'Place a metal sample on the probe and try again.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+            'No sample detected on probe. Place the sample on the sensor and try again.',
+            style: GoogleFonts.inter(
+              color: Colors.white.withAlpha(130),
+              fontSize: 14,
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => ref.read(purityTestProvider.notifier).clearResult(),
-              child: const Text('Try Again'),
+              onPressed: () => widget.onReset?.call(),
+              child: Text(
+                'Try Again',
+                style: GoogleFonts.inter(
+                    fontSize: 14, fontWeight: FontWeight.w700),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUnknownResult(BuildContext context, WidgetRef ref) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF222222),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Icon(Icons.help_outline, color: Colors.grey, size: 48),
-          const SizedBox(height: 12),
-          const Text(
-            'Unknown Result',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'The test did not produce a clear result.',
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => ref.read(purityTestProvider.notifier).clearResult(),
-              child: const Text('Test Again'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResultRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -328,55 +385,299 @@ class PurityResultCard extends ConsumerWidget {
   Widget _buildDistributionBar(int gold, int left, int right) {
     final total = gold + left + right;
     if (total == 0) return const SizedBox.shrink();
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: Row(
-            children: [
-              if (left > 0)
-                Expanded(
-                  flex: left,
-                  child: Container(height: 12, color: Colors.red.withOpacity(0.6)),
-                ),
-              Expanded(
-                flex: gold,
-                child: Container(height: 12, color: const Color(0xFFFFB300)),
-              ),
-              if (right > 0)
-                Expanded(
-                  flex: right,
-                  child: Container(height: 12, color: Colors.orange.withOpacity(0.6)),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: SizedBox(
+        height: 8,
+        child: Row(
           children: [
             if (left > 0)
-              Text(
-                'Below: $left%',
-                style: TextStyle(color: Colors.red.withOpacity(0.8), fontSize: 11),
+              Expanded(
+                flex: left,
+                child: Container(color: Colors.grey.withAlpha(100)),
               ),
-            const Spacer(),
-            Text(
-              'Gold Zone: $gold%',
-              style: const TextStyle(color: Color(0xFFFFB300), fontSize: 11, fontWeight: FontWeight.w600),
+            Expanded(
+              flex: gold,
+              child: Container(color: const Color(0xFFFFB300)),
             ),
-            const Spacer(),
             if (right > 0)
-              Text(
-                'Above: $right%',
-                style: TextStyle(color: Colors.orange.withOpacity(0.8), fontSize: 11),
+              Expanded(
+                flex: right,
+                child: Container(color: Colors.grey.withAlpha(60)),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context) {
+    if (widget.isFullAnalysis) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: widget.onContinue,
+          child: Text(
+            'View Combined Result >',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () {
+              widget.onReset?.call();
+            },
+            child: Text(
+              'Test Again',
+              style:
+                  GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _saveResult(),
+            child: Text(
+              'Save Result',
+              style:
+                  GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  void _saveResult(WidgetRef ref) {
-    ref.read(historyProvider.notifier).addEntry('purity', result.historyLabel, result);
+  Widget _buildNotGoldActions(BuildContext context) {
+    if (widget.isFullAnalysis) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: widget.onContinue,
+          child: Text(
+            'View Combined Result >',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () {
+              widget.onReset?.call();
+            },
+            child: Text(
+              'Test Again',
+              style:
+                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => context.push('/metals'),
+            child: Text(
+              'View in Metals Lab',
+              style:
+                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ElevatedButton(
+            onPressed: () => _saveResult(),
+            child: Text(
+              'Save',
+              style:
+                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+                color: Colors.white.withAlpha(120), fontSize: 14),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds the statistical analysis info panel shown for drift-aware methods.
+  Widget _buildStatisticalInfo(PurityResult result) {
+    final stat = result.statisticalResult!;
+    final adc0 = stat.adc0 as double;
+    final slope = stat.slope as double;
+    final rawMean = stat.rawMean as double;
+    final residualStdDev = stat.residualStdDev as double;
+    final rSquared = stat.rSquared as double;
+    final sampleCount = stat.sampleCount as int;
+    final durationSeconds = stat.durationSeconds as double;
+    final confidence = stat.confidence as double;
+
+    final driftDirection = slope > 0
+        ? '^'
+        : slope < 0
+            ? 'v'
+            : '->';
+    final correction = (adc0 - rawMean).abs();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: const Color(0xFFFFB300).withAlpha(40),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.trending_up,
+                      size: 16, color: Color(0xFFFFB300)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'STATISTICAL ANALYSIS',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFFFB300),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFB300).withAlpha(20),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      result.calculationMethod.shortLabel,
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFFFB300),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _statRow('ADC0 (de-trended)',
+                  nf.NumberFormat.formatADC(adc0.toInt())),
+              _statRow('Raw Mean', nf.NumberFormat.formatADC(rawMean.toInt())),
+              _statRow('Drift Correction',
+                  '$driftDirection ${correction.toStringAsFixed(0)} ADC'),
+              _statRow('Slope', '${slope.toStringAsFixed(1)} ADC/sec'),
+              _statRow('Signal Noise (sigma)', residualStdDev.toStringAsFixed(1)),
+              _statRow('Fit Quality (R^2)',
+                  '${(rSquared * 100).toStringAsFixed(1)}%'),
+              _statRow('Samples',
+                  '$sampleCount in ${durationSeconds.toStringAsFixed(1)}s'),
+              _statRow(
+                  'Statistical Conf.', '${confidence.toStringAsFixed(0)}%'),
+              if (result.calculationMethod ==
+                  PurityCalculationMethod.adaptiveStatistical)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Adaptive ranges were derived from this test using mean, slope, and variance.',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(110),
+                      fontSize: 11,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: Colors.white.withAlpha(90),
+              fontSize: 12,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: Colors.white.withAlpha(200),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveResult() {
+    final r = widget.result;
+    String label;
+    if (r.outcome == PurityOutcome.gold) {
+      label =
+          'Purity Test - ${r.karat}k Gold (${nf.NumberFormat.formatPercent(r.purityPercent ?? 0)}%)';
+    } else if (r.detectedMetal != null) {
+      label =
+          'Purity Test - ${r.detectedMetal!.metal.metalName} (${r.detectedMetal!.confidence.toStringAsFixed(0)}%)';
+    } else {
+      label = 'Purity Test - Unknown Metal';
+    }
+
+    ref.read(historyProvider.notifier).addEntry('purity', label, r);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Result saved to history')),
+    );
   }
 }

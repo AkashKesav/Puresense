@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/live_data.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/live_data_provider.dart';
-import '../utils/range_calculator.dart';
 
 class ProbeStatusBadge extends ConsumerWidget {
   const ProbeStatusBadge({super.key});
@@ -16,17 +15,21 @@ class ProbeStatusBadge extends ConsumerWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFB300).withOpacity(0.2),
+          color: const Color(0xFFFFB300).withAlpha(25),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.warning_amber, color: Color(0xFFFFB300), size: 14),
-            SizedBox(width: 6),
+            const Icon(Icons.warning_amber, color: Color(0xFFFFB300), size: 14),
+            const SizedBox(width: 6),
             Text(
               'Probe in air',
-              style: TextStyle(color: Color(0xFFFFB300), fontSize: 12, fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(
+                color: const Color(0xFFFFB300),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -36,17 +39,21 @@ class ProbeStatusBadge extends ConsumerWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.2),
+          color: Colors.grey.withAlpha(25),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, color: Colors.grey, size: 14),
-            SizedBox(width: 6),
+            const Icon(Icons.error_outline, color: Colors.grey, size: 14),
+            const SizedBox(width: 6),
             Text(
               'No signal',
-              style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(
+                color: Colors.grey,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
