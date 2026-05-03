@@ -205,11 +205,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: onTestAgain,
-                  child: Text(
-                    'Test Again',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Test Again',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -218,11 +221,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () => _saveResult(ref, context),
-                  child: Text(
-                    'Save',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Save',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -232,11 +238,14 @@ class MetalIdResultCard extends ConsumerWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: onRunFullAnalysis,
-                    child: Text(
-                      'Full Analysis',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Full Analysis',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -378,11 +387,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: onTestAnotherMetal,
-                  child: Text(
-                    'Test Another',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Test Another',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -391,11 +403,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: onTestAgain,
-                  child: Text(
-                    'Identify All',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Identify All',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -404,11 +419,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () => _saveResult(ref, context),
-                  child: Text(
-                    'Save',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Save',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -477,11 +495,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: onTestAgain,
-                  child: Text(
-                    'Test Again',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Test Again',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -490,11 +511,14 @@ class MetalIdResultCard extends ConsumerWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () => _saveResult(ref, context),
-                  child: Text(
-                    'Save',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Save',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),

@@ -27,34 +27,42 @@ class LiveDataBar extends ConsumerWidget {
           return Row(
             children: [
               // Weight
-              Text(
-                '⚖ ${nf.NumberFormat.formatWeight(data.weightGrams)} g',
-                style: GoogleFonts.inter(
-                  color: Colors.white.withAlpha(200),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                flex: 2,
+                child: Text(
+                  '⚖ ${nf.NumberFormat.formatWeight(data.weightGrams)} g',
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withAlpha(200),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 12),
+                margin: const EdgeInsets.symmetric(horizontal: 8),
                 width: 1,
                 height: 16,
                 color: Colors.white.withAlpha(25),
               ),
               // ADC
-              Text(
-                '⚡ ADC: ${nf.NumberFormat.formatADC(data.adcValue)}',
-                style: GoogleFonts.inter(
-                  color: Colors.white.withAlpha(200),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                flex: 3,
+                child: Text(
+                  '⚡ ADC: ${nf.NumberFormat.formatADC(data.adcValue)}',
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withAlpha(200),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const Spacer(),
               // Probe status dot & badge
               if (isAir)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFB300).withAlpha(25),
                     borderRadius: BorderRadius.circular(12),
@@ -70,7 +78,7 @@ class LiveDataBar extends ConsumerWidget {
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Text(
                         'Probe in air',
                         style: GoogleFonts.inter(
@@ -78,13 +86,14 @@ class LiveDataBar extends ConsumerWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 )
               else if (noSignal)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey.withAlpha(25),
                     borderRadius: BorderRadius.circular(12),
@@ -100,7 +109,7 @@ class LiveDataBar extends ConsumerWidget {
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Text(
                         'No signal',
                         style: GoogleFonts.inter(
@@ -108,6 +117,7 @@ class LiveDataBar extends ConsumerWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -119,11 +129,14 @@ class LiveDataBar extends ConsumerWidget {
         },
         loading: () => Row(
           children: [
-            Text(
-              '⚖ -- g   |   ⚡ ADC: --',
-              style: GoogleFonts.inter(
-                color: Colors.white.withAlpha(80),
-                fontSize: 13,
+            Flexible(
+              child: Text(
+                '⚖ -- g   |   ⚡ ADC: --',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withAlpha(80),
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const Spacer(),
@@ -143,6 +156,7 @@ class LiveDataBar extends ConsumerWidget {
             color: Colors.red.withAlpha(180),
             fontSize: 13,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

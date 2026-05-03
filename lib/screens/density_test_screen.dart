@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,10 +69,10 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen>
         return;
       }
 
-      // Air weight
+      // Sample weight
       final airW = ResultParser.parseAirWeight(line);
       if (airW != null && state.currentStep == 1) {
-        densityNotifier.onAirWeight(airW);
+        densityNotifier.onSampleWeight(airW);
         return;
       }
 
@@ -192,6 +193,7 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen>
           // Enhanced live weight card with animation
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
+            height: 110,
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
@@ -216,82 +218,85 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen>
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _pulseAnimation.value,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFB300).withAlpha(20),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.scale,
-                          color: Color(0xFFFFB300),
-                          size: 20,
-                        ),
+                Row(
+                  children: [
+                    AnimatedBuilder(
+                      animation: _pulseAnimation,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _pulseAnimation.value,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFB300).withAlpha(20),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.scale,
+                              color: Color(0xFFFFB300),
+                              size: 16,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Live\nReading',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withAlpha(120),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                        height: 1.2,
                       ),
-                    );
-                  },
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(8),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.speed,
+                            size: 14,
+                            color: Colors.white.withAlpha(150),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${(state.currentStep + 1).clamp(1, 4)}/4',
+                            style: GoogleFonts.inter(
+                              color: Colors.white.withAlpha(180),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildStepDots(state.currentStep),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Live Reading',
-                        style: GoogleFonts.inter(
-                          color: Colors.white.withAlpha(120),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '$weight g',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                Text(
+                  '$weight g',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [
+                      ui.FontFeature.tabularFigures(),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(8),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.speed,
-                        size: 14,
-                        color: Colors.white.withAlpha(150),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${(state.currentStep + 1).clamp(1, 4)}/4',
-                        style: GoogleFonts.inter(
-                          color: Colors.white.withAlpha(180),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                _buildStepDots(state.currentStep),
               ],
             ),
           ),
@@ -384,18 +389,18 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen>
                         : null,
                   ),
 
-                  // Step 2: Air Weight
+                  // Step 2: Sample Weight
                   DensityWizardStep(
                     stepNumber: 1,
-                    title: 'Air Weight',
+                    title: 'Sample Weight',
                     instruction: 'Place the dry sample on the scale. Keep it still.',
-                    buttonLabel: 'Record Air Weight',
+                    buttonLabel: 'Record Sample Weight',
                     recordedValue: state.stepValues[1],
                     isCurrent: state.currentStep == 1,
                     isCompleted: state.stepValues.containsKey(1) && state.currentStep > 1,
                     currentLiveWeight: state.isRecording ? state.currentLiveWeight : null,
                     stability: state.isRecording ? stability : null,
-                    onAction: () => ref.read(densityTestProvider.notifier).recordAirWeight(),
+                    onAction: () => ref.read(densityTestProvider.notifier).recordSampleWeight(),
                     onReMeasure: state.stepValues.containsKey(1) && state.currentStep > 1
                         ? () => ref.read(densityTestProvider.notifier).reMeasureStep(1)
                         : null,
@@ -493,25 +498,28 @@ class _DensityTestScreenState extends ConsumerState<DensityTestScreen>
                                                 ),
                                               ),
                                             )
-                                          : Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.calculate,
-                                                  color: Colors.black.withAlpha(180),
-                                                  size: 20,
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Text(
-                                                  'Calculate Density',
-                                                  style: GoogleFonts.inter(
+                                          : FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.calculate,
                                                     color: Colors.black.withAlpha(180),
-                                                    fontSize: 17,
-                                                    fontWeight: FontWeight.w800,
+                                                    size: 20,
                                                   ),
-                                                ),
-                                              ],
+                                                  const SizedBox(width: 12),
+                                                  Text(
+                                                    'Calculate Density',
+                                                    style: GoogleFonts.inter(
+                                                      color: Colors.black.withAlpha(180),
+                                                      fontSize: 17,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                     ),
                                   ),

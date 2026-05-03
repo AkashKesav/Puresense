@@ -31,6 +31,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
 
 dependency_overrides:
   path_provider_foundation: 2.3.2
@@ -46,3 +47,17 @@ flutter:
     - assets/sounds/click_step.mp3
     - assets/sounds/success_density.mp3
     - assets/sounds/error_beep.mp3
+    - assets/images/logo.png
+    # - assets/images/density_zero.png    # Add your own images here
+    # - assets/images/density_sample.png  # Add your own images here
+    # - assets/images/density_water_baseline.png  # Add your own images here
+    # - assets/images/density_submerged.png  # Add your own images here
+    # - assets/images/density_calculate.png  # Add your own images here
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  min_sdk_android: 21

@@ -83,7 +83,7 @@ class DensityTestNotifier extends StateNotifier<DensityTestState> {
     );
   }
 
-  void recordAirWeight() {
+  void recordSampleWeight() {
     state = state.copyWith(
       isRecording: true,
       recordingStartTime: DateTime.now(),
@@ -93,7 +93,7 @@ class DensityTestNotifier extends StateNotifier<DensityTestState> {
     _bt.requestDensityAir(); // Sends 'A' to Arduino
   }
 
-  void onAirWeight(double weight) {
+  void onSampleWeight(double weight) {
     _sound.play(SoundEffect.clickStep);
     final newValues = Map<int, double>.from(state.stepValues);
     newValues[1] = weight;

@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -88,7 +89,10 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen>
           content: Text('Failed to connect to ${device.name}'),
           action: SnackBarAction(
             label: 'Retry',
-            onPressed: () => _connectToDevice(device),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _connectToDevice(device);
+            },
           ),
         ),
       );
@@ -219,7 +223,10 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen>
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isScanning ? null : _scan,
+                  onPressed: _isScanning ? null : () {
+                    HapticFeedback.mediumImpact();
+                    _scan();
+                  },
                   icon: _isScanning
                       ? const SizedBox(
                           width: 18,
@@ -286,7 +293,10 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen>
                             device: device,
                             isRecommended: isRecommended,
                             isConnecting: isConnecting,
-                            onTap: () => _connectToDevice(device),
+                            onTap: () {
+                              HapticFeedback.heavyImpact();
+                              _connectToDevice(device);
+                            },
                           );
                         },
                       ),

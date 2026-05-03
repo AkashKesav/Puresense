@@ -49,6 +49,8 @@ class BtStatusChip extends ConsumerWidget {
                   color: color,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.none,
+                  decorationColor: Colors.transparent,
                 ),
               ),
             ],

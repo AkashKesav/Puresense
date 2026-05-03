@@ -3,74 +3,82 @@ import 'package:csv/csv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 import 'dart:io';
 import '../models/live_data.dart';
 import '../models/purity_calculation_method.dart';
+import '../utils/statistical_classifier.dart';
 
 class HistoryNotifier extends StateNotifier<List<HistoryEntry>> {
-  Database? _db;
-
   HistoryNotifier() : super([]) {
-    _initDb();
+    _load();
   }
 
-  Future<void> _initDb() async {
+  Future<File> get _file async {
     final dir = await getApplicationDocumentsDirectory();
-    final path = join(dir.path, 'puresense_history.db');
-    _db = await openDatabase(path, version: 1, onCreate: (db, version) async {
-      await db.execute('''
-        CREATE TABLE history (
-          id TEXT PRIMARY KEY,
-          type TEXT,
-          label TEXT,
-          result TEXT,
-          timestamp TEXT
-        )
-      ''');
-    });
-    await _load();
+    return File(join(dir.path, 'puresense_history.json'));
   }
 
   Future<void> _load() async {
-    if (_db == null) return;
-    final rows = await _db!.query('history', orderBy: 'timestamp DESC');
-    final entries = rows
-        .map((row) => HistoryEntry(
-              id: row['id'] as String,
-              type: row['type'] as String,
-              label: row['label'] as String,
-              result: row['result'] as String,
-              timestamp: DateTime.parse(row['timestamp'] as String),
-            ))
-        .toList();
-    state = entries;
+    try {
+      final file = await _file;
+      if (!await file.exists()) return;
+      final jsonString = await file.readAsString();
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      
+      final entries = jsonList.map((data) => HistoryEntry(
+        id: data['id'] as String,
+        type: data['type'] as String,
+        label: data['label'] as String,
+        result: _deserializeResult(data['result'] as String),
+        timestamp: DateTime.parse(data['timestamp'] as String),
+      )).toList();
+      
+      // Sort descending (newest first)
+      entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      state = entries;
+    } catch (e) {
+      print('Error loading history: $e');
+    }
+  }
+
+  Future<void> _save(List<HistoryEntry> entries) async {
+    try {
+      final file = await _file;
+      final jsonList = entries.map((entry) => {
+        'id': entry.id,
+        'type': entry.type,
+        'label': entry.label,
+        'result': jsonEncode(_serializeResult(entry.result)),
+        'timestamp': entry.timestamp.toIso8601String(),
+      }).toList();
+      await file.writeAsString(jsonEncode(jsonList));
+    } catch (e) {
+      print('Error saving history: $e');
+    }
   }
 
   Future<void> addEntry(String type, String label, dynamic result) async {
-    if (_db == null) return;
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
-    final resultStr = jsonEncode(_serializeResult(result));
-    await _db!.insert('history', {
-      'id': id,
-      'type': type,
-      'label': label,
-      'result': resultStr,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
-    await _load();
+    final newEntry = HistoryEntry(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      type: type,
+      label: label,
+      result: result,
+      timestamp: DateTime.now(),
+    );
+    final newState = [newEntry, ...state];
+    state = newState;
+    await _save(newState);
   }
 
   Future<void> deleteEntry(String id) async {
-    if (_db == null) return;
-    await _db!.delete('history', where: 'id = ?', whereArgs: [id]);
-    await _load();
+    final newState = state.where((e) => e.id != id).toList();
+    state = newState;
+    await _save(newState);
   }
 
   Future<void> clearAll() async {
-    if (_db == null) return;
-    await _db!.delete('history');
-    await _load();
+    state = [];
+    await _save([]);
   }
 
   /// Export all history entries to CSV and return the file path
@@ -186,6 +194,111 @@ class HistoryNotifier extends StateNotifier<List<HistoryEntry>> {
       };
     }
     return {};
+  }
+
+  dynamic _deserializeResult(String resultJson) {
+    try {
+      final data = jsonDecode(resultJson) as Map<String, dynamic>;
+      final kind = data['kind'] as String?;
+
+      switch (kind) {
+        case 'purity':
+          final statistical = data['statistical'] as Map<String, dynamic>?;
+          return PurityResult(
+            outcome: _parseOutcome(data['outcome'] as String?),
+            calculationMethod: _parseCalculationMethod(data['calculationMethod'] as String?),
+            meanADC: data['meanADC'] as int? ?? 0,
+            karat: data['karat'] as int? ?? 0,
+            purityPercent: data['purityPercent'] as double? ?? 0.0,
+            distributionGold: (data['distributionGold'] as num?)?.toInt() ?? 0,
+            distributionLeft: (data['distributionLeft'] as num?)?.toInt() ?? 0,
+            distributionRight: (data['distributionRight'] as num?)?.toInt() ?? 0,
+            detectedMetal: null, // Would need metal reference to reconstruct
+            otherMatches: [], // Would need metal reference to reconstruct
+            timestamp: DateTime.now(),
+            statisticalResult: statistical == null ? null : StatisticalResult(
+              adc0: (statistical['adc0'] as num?)?.toDouble() ?? 0.0,
+              slope: statistical['slope'] as double? ?? 0.0,
+              rawMean: statistical['rawMean'] as double? ?? 0.0,
+              residualVariance: statistical['residualVariance'] as double? ?? 0.0,
+              residualStdDev: statistical['residualStdDev'] as double? ?? 0.0,
+              confidence: statistical['confidence'] as double? ?? 0.0,
+              sampleCount: statistical['sampleCount'] as int? ?? 0,
+              durationSeconds: statistical['durationSeconds'] as double? ?? 0.0,
+              rSquared: statistical['rSquared'] as double? ?? 0.0,
+            ),
+          );
+
+        case 'density':
+          return DensityResult(
+            density: data['density'] as double? ?? 0.0,
+            metalLabel: data['metalLabel'] as String? ?? '',
+            wAir: data['wAir'] as double? ?? 0.0,
+            wWater: data['wWater'] as double? ?? 0.0,
+            wSubmerged: data['wSubmerged'] as double? ?? 0.0,
+            buoyancy: data['buoyancy'] as double? ?? 0.0,
+            timestamp: DateTime.now(),
+          );
+
+        case 'full':
+          final densityData = data['density'] as Map<String, dynamic>?;
+          final purityData = data['purity'] as Map<String, dynamic>?;
+          return FullAnalysisResult(
+            density: DensityResult(
+              density: densityData?['density'] as double? ?? 0.0,
+              metalLabel: densityData?['metalLabel'] as String? ?? '',
+              wAir: densityData?['wAir'] as double? ?? 0.0,
+              wWater: densityData?['wWater'] as double? ?? 0.0,
+              wSubmerged: densityData?['wSubmerged'] as double? ?? 0.0,
+              buoyancy: densityData?['buoyancy'] as double? ?? 0.0,
+              timestamp: DateTime.now(),
+            ),
+            purity: PurityResult(
+              outcome: _parseOutcome(purityData?['outcome'] as String?),
+              calculationMethod: _parseCalculationMethod(purityData?['calculationMethod'] as String?),
+              meanADC: purityData?['meanADC'] as int? ?? 0,
+              karat: purityData?['karat'] as int? ?? 0,
+              purityPercent: purityData?['purityPercent'] as double? ?? 0.0,
+              distributionGold: (purityData?['distributionGold'] as num?)?.toInt() ?? 0,
+              distributionLeft: (purityData?['distributionLeft'] as num?)?.toInt() ?? 0,
+              distributionRight: (purityData?['distributionRight'] as num?)?.toInt() ?? 0,
+              detectedMetal: null,
+              otherMatches: [],
+              timestamp: DateTime.now(),
+              statisticalResult: null,
+            ),
+            verdict: data['verdict'] as String? ?? '',
+            timestamp: DateTime.now(),
+          );
+
+        case 'metalId':
+          return MetalIdentificationResult(
+            meanADC: data['meanADC'] as int? ?? 0,
+            matches: [], // Would need metal reference to reconstruct matches
+            timestamp: DateTime.now(),
+          );
+
+        default:
+          return resultJson; // Return raw JSON if kind is unknown
+      }
+    } catch (e) {
+      // If deserialization fails, return raw JSON string
+      return resultJson;
+    }
+  }
+
+  PurityOutcome _parseOutcome(String? outcomeStr) {
+    if (outcomeStr == 'PurityOutcome.gold') return PurityOutcome.gold;
+    if (outcomeStr == 'PurityOutcome.notGold') return PurityOutcome.notGold;
+    return PurityOutcome.unknown;
+  }
+
+  PurityCalculationMethod _parseCalculationMethod(String? methodStr) {
+    if (methodStr == null) return PurityCalculationMethod.standardMean;
+    return PurityCalculationMethod.values.firstWhere(
+      (m) => m.prefsValue == methodStr,
+      orElse: () => PurityCalculationMethod.standardMean,
+    );
   }
 }
 

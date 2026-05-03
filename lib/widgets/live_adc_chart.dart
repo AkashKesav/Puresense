@@ -26,7 +26,8 @@ class _LiveADCChartState extends ConsumerState<LiveADCChart> {
     liveAsync.whenData((data) {
       _tick++;
       _dataPoints.add(FlSpot(_tick.toDouble(), data.adcValue.toDouble()));
-      if (_dataPoints.length > 30) {
+      // Keep only 15 points for cleaner look (was 30)
+      if (_dataPoints.length > 15) {
         _dataPoints.removeAt(0);
       }
     });
@@ -39,22 +40,24 @@ class _LiveADCChartState extends ConsumerState<LiveADCChart> {
     final isAir = currentADC > 18000;
     final noSignal = currentADC < 500;
 
-    // Y axis range
+    // Y axis range - tighter for better visualization
     final dataMin = _dataPoints.map((e) => e.y).reduce(min);
     final dataMax = _dataPoints.map((e) => e.y).reduce(max);
-    final yMin = (dataMin - 1000).clamp(0.0, 30000.0);
-    final yMax = (dataMax + 1000).clamp(1000.0, 32000.0);
+    final yMin = (dataMin - 500).clamp(0.0, 30000.0);
+    final yMax = (dataMax + 500).clamp(1000.0, 32000.0);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      // Reduced height for cleaner UI
+      height: 120, // Was unconstrained
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isAir
             ? const Color(0xFFFFB300).withAlpha(8)
             : noSignal
                 ? Colors.grey.withAlpha(8)
                 : const Color(0xFF222222),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isAir
               ? const Color(0xFFFFB300).withAlpha(40)
@@ -72,7 +75,7 @@ class _LiveADCChartState extends ConsumerState<LiveADCChart> {
                 'Live ADC',
                 style: GoogleFonts.inter(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 12, // Smaller font
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -120,9 +123,10 @@ class _LiveADCChartState extends ConsumerState<LiveADCChart> {
               ),
             ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          // Reduced chart height for cleaner UI
           SizedBox(
-            height: 150,
+            height: 80, // Was 150 - much more compact!
             child: LineChart(
               LineChartData(
                 minX: minX,

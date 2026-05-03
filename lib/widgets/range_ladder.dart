@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/calibration_provider.dart';
 import '../providers/live_data_provider.dart';
+import '../providers/metal_reference_provider.dart';
 import '../utils/number_format.dart' as nf;
+import '../utils/electrochemical_range_predictor.dart';
 
 class RangeLadder extends ConsumerStatefulWidget {
   final bool showGoldOnly;
@@ -35,17 +37,19 @@ class _RangeLadderState extends ConsumerState<RangeLadder>
   @override
   Widget build(BuildContext context) {
     final cal = ref.watch(calibrationProvider);
+    final metalState = ref.watch(metalReferenceProvider); // Use metal reference provider!
     final liveAsync = ref.watch(liveDataProvider);
     final adc = liveAsync.when(data: (d) => d.adcValue, loading: () => 0, error: (_, __) => 0);
     // Probe in air: ADC > 15000 means no metal contact
     final isAir = adc > 15000;
 
+    // Use electrochemical predictions for gold karats when available
     final ranges = widget.showGoldOnly
-        ? cal.karatRanges
+        ? metalState.allMetals.where((m) => m.metalName.contains('Gold')).toList()
         : null;
     final metals = widget.showGoldOnly
         ? null
-        : cal.metalRanges;
+        : metalState.allMetals; // Use allMetals (built-in + custom)!
 
     return Stack(
       children: [
@@ -66,13 +70,16 @@ class _RangeLadderState extends ConsumerState<RangeLadder>
             const SizedBox(height: 4),
 
             if (widget.showGoldOnly && ranges != null) ...[
-              ...ranges.map((range) {
-                final isMatch = adc >= range.min && adc <= range.max && !isAir;
+              ...ranges.map((metal) {
+                final isMatch = adc >= metal.min && adc <= metal.max && !isAir;
+                // Extract karat number from metal name (e.g., "Gold 22k" -> 22)
+                final karatNum = int.tryParse(metal.metalName.replaceAll(RegExp(r'[^0-9]'), '')) ?? 22;
+
                 return _RangeRow(
-                  color: range.color,
-                  label: '${range.karat}k',
-                  sublabel: range.label,
-                  rangeText: nf.NumberFormat.formatADCRange(range.min, range.max),
+                  color: metal.color,
+                  label: '${karatNum}k',
+                  sublabel: '', // Electrochemical predictions don't have labels
+                  rangeText: nf.NumberFormat.formatADCRange(metal.min, metal.max),
                   isMatch: isMatch,
                   glowController: _glowController,
                 );
@@ -82,8 +89,8 @@ class _RangeLadderState extends ConsumerState<RangeLadder>
                 color: const Color(0xFF757575),
                 label: '<9k',
                 sublabel: 'Not Gold',
-                rangeText: 'Below ${nf.NumberFormat.formatADC(cal.karatRanges.last.min.toInt())}',
-                isMatch: adc < cal.karatRanges.last.min && !isAir,
+                rangeText: 'Below ${nf.NumberFormat.formatADC(ranges.last.min.toInt())}',
+                isMatch: adc < ranges.last.min && !isAir,
                 glowController: _glowController,
               ),
             ],

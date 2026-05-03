@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/history_provider.dart';
@@ -46,7 +47,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         actions: [
           if (entries.isNotEmpty)
             TextButton.icon(
-              onPressed: () => _exportCSV(entries),
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                _exportCSV(entries);
+              },
               icon: const Icon(Icons.download, size: 18),
               label: Text(
                 'CSV',
@@ -69,7 +73,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 final filter = _filters[index];
                 final isActive = _filter == filter;
                 return GestureDetector(
-                  onTap: () => setState(() => _filter = filter),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _filter = filter);
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     alignment: Alignment.center,

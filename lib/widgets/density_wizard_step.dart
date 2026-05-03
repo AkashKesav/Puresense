@@ -81,7 +81,8 @@ class _DensityWizardStepState extends State<DensityWizardStep>
 
   Widget _buildStepIllustration() {
     return Container(
-      height: 120,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -91,77 +92,237 @@ class _DensityWizardStepState extends State<DensityWizardStep>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _stepColor.withAlpha(40),
           width: 1.5,
         ),
       ),
-      child: Stack(
-        children: [
-          Center(
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 600),
-              builder: (context, value, child) {
-                return Transform.scale(
-                  scale: 0.8 + (0.2 * value),
-                  child: Opacity(
-                    opacity: value,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                _stepColor.withAlpha(30),
-                                _stepColor.withAlpha(20),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _stepIcon,
-                            size: 40,
-                            color: _stepColor,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _getStepDescription(),
-                          style: GoogleFonts.inter(
-                            color: Colors.white.withAlpha(150),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 600),
+        builder: (context, value, child) {
+          return Transform.scale(
+            scale: 0.8 + (0.2 * value),
+            child: Opacity(
+              opacity: value,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildStepVisual(),
+                  const SizedBox(height: 16),
+                  Text(
+                    _getStepDescription(),
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(180),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                );
-              },
+                  const SizedBox(height: 6),
+                  Text(
+                    _getStepDetail(),
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(120),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
+  }
+
+  Widget _buildStepVisual() {
+    switch (widget.stepNumber) {
+      case 0: // Zero Scale
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF78909C).withAlpha(30),
+                const Color(0xFF78909C).withAlpha(15),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.scale,
+            size: 48,
+            color: const Color(0xFF78909C),
+          ),
+        );
+      case 1: // Sample Weight
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFFFFB300).withAlpha(30),
+                const Color(0xFFFFB300).withAlpha(15),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.science,
+                size: 40,
+                color: const Color(0xFFFFB300),
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB300).withAlpha(40),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      case 2: // Water Baseline
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF2196F3).withAlpha(30),
+                const Color(0xFF2196F3).withAlpha(15),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 50,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2196F3).withAlpha(25),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.science_outlined,
+                  size: 28,
+                  color: const Color(0xFF2196F3),
+                ),
+              ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Icon(
+                  Icons.water_drop,
+                  size: 16,
+                  color: const Color(0xFF2196F3).withAlpha(180),
+                ),
+              ),
+            ],
+          ),
+        );
+      case 3: // Submerged Weight
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF00BCD4).withAlpha(30),
+                const Color(0xFF00BCD4).withAlpha(15),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.opacity,
+                size: 38,
+                color: const Color(0xFF00BCD4),
+              ),
+              Positioned(
+                bottom: 6,
+                right: 6,
+                child: Icon(
+                  Icons.arrow_downward,
+                  size: 14,
+                  color: Colors.white.withAlpha(180),
+                ),
+              ),
+            ],
+          ),
+        );
+      default:
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF4CAF50).withAlpha(30),
+                const Color(0xFF4CAF50).withAlpha(15),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.check_circle,
+            size: 48,
+            color: const Color(0xFF4CAF50),
+          ),
+        );
+    }
+  }
+
+  String _getStepDetail() {
+    switch (widget.stepNumber) {
+      case 0:
+        return 'Remove all items from scale';
+      case 1:
+        return 'Place your metal sample';
+      case 2:
+        return 'Container with water only';
+      case 3:
+        return 'Sample fully in water';
+      default:
+        return 'All steps complete';
+    }
   }
 
   IconData get _stepIcon {
     switch (widget.stepNumber) {
       case 0:
-        return Icons.bubble_chart;
+        return Icons.scale;
       case 1:
-        return Icons.air;
+        return Icons.science;
       case 2:
         return Icons.water_drop;
       case 3:
-        return Icons.science;
+        return Icons.opacity;
       default:
         return Icons.check_circle;
     }
@@ -170,15 +331,15 @@ class _DensityWizardStepState extends State<DensityWizardStep>
   Color get _stepColor {
     switch (widget.stepNumber) {
       case 0:
-        return const Color(0xFF607D8B);
+        return const Color(0xFF78909C);  // Silver-grey for scale
       case 1:
-        return const Color(0xFF2196F3);
+        return const Color(0xFFFFB300);  // Gold for sample
       case 2:
-        return const Color(0xFF00BCD4);
+        return const Color(0xFF2196F3);  // Blue for water
       case 3:
-        return const Color(0xFF009688);
+        return const Color(0xFF00BCD4);  // Cyan for submerged
       default:
-        return const Color(0xFFFFB300);
+        return const Color(0xFF4CAF50);  // Green for complete
     }
   }
 
@@ -414,25 +575,28 @@ class _DensityWizardStepState extends State<DensityWizardStep>
                                       },
                                       borderRadius: BorderRadius.circular(12),
                                       child: Center(
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              _stepIcon,
-                                              size: 18,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              widget.buttonLabel,
-                                              style: GoogleFonts.inter(
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                _stepIcon,
+                                                size: 18,
                                                 color: Colors.white,
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700,
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                widget.buttonLabel,
+                                                style: GoogleFonts.inter(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -455,15 +619,15 @@ class _DensityWizardStepState extends State<DensityWizardStep>
   String _getStepDescription() {
     switch (widget.stepNumber) {
       case 0:
-        return 'Empty Scale';
+        return 'Zero the Scale';
       case 1:
-        return 'Dry Sample';
+        return 'Sample Weight';
       case 2:
-        return 'Water Only';
+        return 'Water Baseline';
       case 3:
-        return 'Underwater';
+        return 'Submerged Weight';
       default:
-        return 'Complete';
+        return 'Calculate';
     }
   }
 

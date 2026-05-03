@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/live_data.dart';
@@ -12,6 +13,7 @@ import '../providers/settings_provider.dart';
 import '../utils/number_format.dart' as nf;
 import '../utils/range_calculator.dart';
 import '../utils/statistical_classifier.dart';
+import '../utils/unified_detector.dart';
 import '../widgets/live_data_bar.dart';
 import '../widgets/metal_id_result_card.dart';
 import '../widgets/noble_metal_scale_chart.dart';
@@ -78,33 +80,47 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
     final settings = ref.read(settingsProvider);
     final method = settings.calculationMethod;
 
-    final collectedMean = await bt.startPurityTestFor(method.sampleDuration);
-    final rawSamples = bt.purityADCSamplesCopy;
-    final robustMean = rawSamples.isNotEmpty
-        ? RangeCalculator.computeRobustADC(rawSamples)
-        : collectedMean;
-
-    int classificationADC = robustMean;
+    int classificationADC;
     StatisticalResult? statResult;
 
-    if (method.usesStatisticalAnalysis) {
-      final timedSamples = bt.purityTimedSamplesCopy
-          .where((sample) => sample.adc <= 15000)
-          .toList(growable: false);
+    // Use unified detector if selected
+    if (method == PurityCalculationMethod.unifiedEnsemble) {
+      final rawSamples = bt.purityADCSamplesCopy;
+      final unifiedResult = await UnifiedGoldDetector.detect(rawSamples);
+      classificationADC = unifiedResult.meanAdc;
+    } else {
+      // Use existing methods
+      final collectedMean = await bt.startPurityTestFor(method.sampleDuration);
+      final rawSamples = bt.purityADCSamplesCopy;
+      final robustMean = rawSamples.isNotEmpty
+          ? RangeCalculator.computeRobustADC(rawSamples)
+          : collectedMean;
 
-      if (timedSamples.length >= 2) {
-        statResult = StatisticalClassifier.analyze(timedSamples);
-        switch (method) {
-          case PurityCalculationMethod.standardMean:
-            classificationADC = robustMean;
-            break;
-          case PurityCalculationMethod.detrendedSlope:
-            classificationADC = statResult.adcInt;
-            break;
-          case PurityCalculationMethod.adaptiveStatistical:
-            classificationADC =
-                StatisticalClassifier.computeAdaptiveADC(statResult);
-            break;
+      classificationADC = robustMean;
+
+      if (method.usesStatisticalAnalysis) {
+        final timedSamples = bt.purityTimedSamplesCopy
+            .where((sample) => sample.adc <= 15000)
+            .toList(growable: false);
+
+        if (timedSamples.length >= 2) {
+          statResult = StatisticalClassifier.analyze(timedSamples);
+          switch (method) {
+            case PurityCalculationMethod.standardMean:
+              classificationADC = robustMean;
+              break;
+            case PurityCalculationMethod.detrendedSlope:
+              classificationADC = statResult.adcInt;
+              break;
+            case PurityCalculationMethod.adaptiveStatistical:
+              classificationADC =
+                  StatisticalClassifier.computeAdaptiveADC(statResult);
+              break;
+            case PurityCalculationMethod.unifiedEnsemble:
+              // Already handled above
+              classificationADC = robustMean;
+              break;
+          }
         }
       }
     }
@@ -164,6 +180,7 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
         actions: [
           IconButton(
             onPressed: () {
+              HapticFeedback.mediumImpact();
               ref.read(metalReferenceProvider.notifier).resetToDefaults();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Reset to original values')),
@@ -175,7 +192,10 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddCustomMetalSheet(context),
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          _showAddCustomMetalSheet(context);
+        },
         backgroundColor: const Color(0xFFFFB300),
         child: const Icon(Icons.add, color: Colors.black),
       ),
@@ -365,7 +385,10 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed:
-                          _isIdentifying ? null : () => _startSingleTest(metal),
+                          _isIdentifying ? null : () {
+                        HapticFeedback.mediumImpact();
+                        _startSingleTest(metal);
+                      },
                       child: Text(
                         'Test Sample',
                         style: GoogleFonts.inter(
@@ -376,7 +399,10 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => _showEditADCSheet(context, metal),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _showEditADCSheet(context, metal);
+                      },
                       child: Text(
                         'Edit ADC',
                         style: GoogleFonts.inter(
@@ -390,6 +416,7 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                       width: 40,
                       child: IconButton(
                         onPressed: () {
+                          HapticFeedback.heavyImpact();
                           ref
                               .read(metalReferenceProvider.notifier)
                               .removeCustomMetal(metal.metalName);
@@ -460,17 +487,18 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.warning_amber,
                       color: Color(0xFFFFB300), size: 16),
                   const SizedBox(width: 8),
-                  Text(
-                    'Probe in air — touch sample to identify',
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFFFFB300),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Text(
+                      'Probe in air — touch sample to identify',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFFFB300),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -539,7 +567,10 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isIdentifying ? null : _startIdentifyAll,
+              onPressed: _isIdentifying ? null : () {
+                HapticFeedback.heavyImpact();
+                _startIdentifyAll();
+              },
               child: Text(
                 'Identify This Sample →',
                 style: GoogleFonts.inter(
@@ -555,6 +586,7 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
   Widget _buildToggleButton(String label, bool isActive) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() => _showGoldOnly = label == 'Gold Tiers');
       },
       child: Container(
@@ -739,6 +771,7 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
+                    HapticFeedback.mediumImpact();
                     final name = nameCtrl.text.trim();
                     final adc = double.tryParse(adcCtrl.text);
                     final dens = double.tryParse(densCtrl.text);
@@ -880,7 +913,10 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pop(ctx);
+                      },
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -888,6 +924,7 @@ class _MetalReferenceScreenState extends ConsumerState<MetalReferenceScreen> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
+                        HapticFeedback.mediumImpact();
                         final adc = double.tryParse(adcCtrl.text);
                         if (adc == null) return;
 

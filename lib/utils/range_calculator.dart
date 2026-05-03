@@ -57,14 +57,68 @@ class RangeCalculator {
     final refForAnchorKarat = refValues[anchorKarat] ?? refAnchor;
     final scaleFactor = (anchorADC / refForAnchorKarat).abs();
 
-    final ranges = <KaratRange>[];
+    // Calculate base expected ADC values with scaling
+    final baseExpected = <int, double>{};
     for (final tier in karatTiers) {
       final refADC = refValues[tier] ?? refAnchor;
       final offset = refADC - refForAnchorKarat;
-      final expected = anchorADC + offset * scaleFactor;
-      final scaledTol = tolerance * scaleFactor;
-      final min = expected - scaledTol;
-      final max = expected + scaledTol;
+      baseExpected[tier] = anchorADC + offset * scaleFactor;
+    }
+
+    // Define minimum linear spacing between karats to prevent collapse
+    // Only apply when natural spacing is too small (collapse condition)
+    const minSpacing = 100.0; // Minimum ADC units between adjacent karats
+    const collapseThreshold = 50.0; // If spacing < 50, it's considered collapsed
+
+    // Check if we need to apply spacing fixes (prevent collapse condition)
+    bool needsSpacingFix = false;
+    for (int i = 0; i < karatTiers.length - 1; i++) {
+      final currentTier = karatTiers[i];
+      final nextTier = karatTiers[i + 1];
+      final spacing = (baseExpected[currentTier]! - baseExpected[nextTier]!).abs();
+      if (spacing < collapseThreshold) {
+        needsSpacingFix = true;
+        break;
+      }
+    }
+
+    // Only adjust expected values if we detect collapse
+    final adjustedExpected = <int, double>{};
+    if (needsSpacingFix) {
+      // Apply minimum spacing to prevent collapse
+      for (int i = 0; i < karatTiers.length; i++) {
+        final tier = karatTiers[i];
+        final baseValue = baseExpected[tier]!;
+
+        if (i == 0) {
+          // First tier (24k) - use base value
+          adjustedExpected[tier] = baseValue;
+        } else {
+          final prevTier = karatTiers[i - 1];
+          final prevValue = adjustedExpected[prevTier]!;
+
+          // Ensure this tier is at least minSpacing below the previous one
+          final requiredMax = prevValue - minSpacing;
+          adjustedExpected[tier] = baseValue < requiredMax ? baseValue : requiredMax;
+        }
+      }
+    } else {
+      // No collapse detected, use original values
+      adjustedExpected.addAll(baseExpected);
+    }
+
+    // Build final ranges with adjusted expected values and reasonable tolerances
+    final ranges = <KaratRange>[];
+    for (final tier in karatTiers) {
+      final expected = adjustedExpected[tier]!;
+
+      // Use scaled tolerance normally, but apply adaptive tolerance only when collapse detected
+      final baseTol = tolerance * scaleFactor;
+      final finalTol = needsSpacingFix ? baseTol.clamp(30.0, 300.0) : baseTol;
+
+      final min = expected - finalTol;
+      final max = expected + finalTol;
+
       ranges.add(KaratRange(
         karat: tier,
         label: tier == 24 ? 'Pure Gold' : 'Gold',
@@ -78,7 +132,7 @@ class RangeCalculator {
     // Extend 24k gold range in the noble direction
     if (ranges.isNotEmpty && ranges.first.karat == 24) {
       final g24 = ranges.first;
-      final extension = 2000.0 * scaleFactor;
+      final extension = max(2000.0 * scaleFactor, 500.0);
       final extendedMax = (g24.max + extension).clamp(-10000.0, 14000.0);
       ranges[0] = KaratRange(
         karat: g24.karat,
@@ -224,7 +278,7 @@ class RangeCalculator {
     //   Silver expected: +1500 + (-3500 * 1.0) = -2000  ✓ (below 22k)
     //   24k offset: -1375 - (-1500) = +125
     //   24k expected: +1500 + (+125 * 1.0) = +1625  ✓ (above 22k)
-    final metals = references.map((ref) {
+    final baseMetals = references.map((ref) {
       final refADC = ref['refADC'] as double;
       final offset = refADC - refAnchor;
       final expected = goldReferenceADC + offset * scaleFactor;
@@ -240,20 +294,79 @@ class RangeCalculator {
       );
     }).toList();
 
-    // Normalize into a continuous, non-overlapping ladder.
-    return _normalizeContinuousMetalRanges(metals);
+    // Check for collapse condition and apply minimum spacing if needed
+    const minSpacing = 100.0; // Minimum ADC units between adjacent metals
+    const collapseThreshold = 50.0; // If spacing < 50, it's considered collapsed
+
+    // Sort by expected ADC for processing
+    baseMetals.sort((a, b) => b.expectedADC.compareTo(a.expectedADC));
+
+    // Check if we need to apply spacing fixes
+    bool needsSpacingFix = false;
+    for (int i = 0; i < baseMetals.length - 1; i++) {
+      final spacing = (baseMetals[i].expectedADC - baseMetals[i + 1].expectedADC).abs();
+      if (spacing < collapseThreshold) {
+        needsSpacingFix = true;
+        break;
+      }
+    }
+
+    // Only adjust if we detect collapse
+    List<MetalRange> processedMetals = baseMetals;
+    if (needsSpacingFix) {
+      final adjustedMetals = <MetalRange>[];
+      for (int i = 0; i < baseMetals.length; i++) {
+        final current = baseMetals[i];
+        final currentTol = (current.max - current.min) / 2; // Get original scaled tolerance
+        double adjustedExpected = current.expectedADC;
+
+        if (i > 0) {
+          final prevExpected = adjustedMetals[i - 1].expectedADC;
+          final requiredMax = prevExpected - minSpacing;
+          adjustedExpected = current.expectedADC < requiredMax ? current.expectedADC : requiredMax;
+        }
+
+        // Use the original scaled tolerance (not adaptive)
+        adjustedMetals.add(MetalRange(
+          metalName: current.metalName,
+          expectedADC: adjustedExpected,
+          min: adjustedExpected - currentTol,
+          max: adjustedExpected + currentTol,
+          color: current.color,
+          description: current.description,
+          densityGcm3: current.densityGcm3,
+          isCustom: current.isCustom,
+        ));
+      }
+      processedMetals = adjustedMetals;
+    }
+
+    // Normalize into a continuous, non-overlapping ladder
+    return _normalizeContinuousMetalRanges(processedMetals);
   }
 
   /// Convert arbitrary per-metal spans into a continuous, non-overlapping ladder.
   ///
   /// Adjacent metals share a midpoint boundary so that every ADC belongs to one
   /// nearest band without gaps.
+  ///
+  /// Custom metals (isCustom=true) are preserved as-is and not normalized.
   static List<MetalRange> _normalizeContinuousMetalRanges(
     List<MetalRange> ranges,
   ) {
     if (ranges.isEmpty) return const <MetalRange>[];
 
-    final sorted = List<MetalRange>.from(ranges)
+    // Separate custom and built-in metals
+    final customMetals = ranges.where((r) => r.isCustom).toList();
+    final builtInMetals = ranges.where((r) => !r.isCustom).toList();
+
+    if (builtInMetals.isEmpty) {
+      // If only custom metals, return as-is
+      return ranges;
+    }
+
+    // Sort built-in metals by expected ADC (highest/most noble first)
+    final sorted = List<MetalRange>.from(builtInMetals)
       ..sort((a, b) => b.expectedADC.compareTo(a.expectedADC));
     final normalized = <MetalRange>[];
 
@@ -307,7 +420,13 @@ class RangeCalculator {
       );
     }
 
-    return normalized;
+    // Combine normalized built-in metals with unchanged custom metals
+    final combined = [...normalized, ...customMetals];
+
+    // Sort all metals by expected ADC for consistent ordering
+    combined.sort((a, b) => b.expectedADC.compareTo(a.expectedADC));
+
+    return combined;
   }
 
   static double computeConfidence(int adcValue, MetalRange range) {
@@ -315,11 +434,18 @@ class RangeCalculator {
     final halfSpan = (range.max - range.min) / 2;
     if (halfSpan <= 0) return 0;
 
-    // Primary confidence based on how close we are to expected value
-    final positionConfidence = max(0, 1 - (diff / halfSpan));
+    // For very tight ranges (≤ 100 ADC units), use a larger effective halfSpan
+    // to avoid penalizing precise custom calibrations
+    final effectiveHalfSpan = halfSpan <= 100.0 ? 200.0 : halfSpan;
 
-    // Bonus for being within the range
-    final inRangeBonus = (adcValue >= range.min && adcValue <= range.max) ? 0.15 : 0.0;
+    // Primary confidence based on how close we are to expected value
+    final positionConfidence = max(0, 1 - (diff / effectiveHalfSpan));
+
+    // Strong bonus for tight ranges - they represent precise measurements
+    // Very tight (≤ 50): 0.50 bonus, Tight (≤ 100): 0.30 bonus, Normal: 0.15 bonus
+    final inRangeBonus = (adcValue >= range.min && adcValue <= range.max)
+        ? (halfSpan <= 50.0 ? 0.50 : halfSpan <= 100.0 ? 0.30 : 0.15)
+        : 0.0;
 
     // Penalty for being far from the range (smooth falloff)
     final distancePenalty = (diff > halfSpan * 2) ? 0.2 : 0.0;
@@ -406,8 +532,8 @@ class RangeCalculator {
     // If one or more metals contain the ADC, only rank those.
     final scored = inRangeScored.isNotEmpty ? inRangeScored : outOfRangeScored;
 
-    // If a positive threshold filters everything out, still return nearest with better confidence.
-    if (scored.isEmpty) {
+    // If all scores have 0 confidence (or list is empty), use fallback logic with minimum confidence
+    if (scored.isEmpty || scored.every((s) => s.confidence == 0)) {
       final nearest = ranges.reduce((a, b) {
         final da = (adcValue - a.expectedADC).abs();
         final db = (adcValue - b.expectedADC).abs();

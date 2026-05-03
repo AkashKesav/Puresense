@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -67,6 +68,7 @@ class SettingsScreen extends ConsumerWidget {
                           }).toList(),
                           onChanged: (v) {
                             if (v != null) {
+                              HapticFeedback.selectionClick();
                               ref
                                   .read(calibrationProvider.notifier)
                                   .updateCalibration(
@@ -74,6 +76,20 @@ class SettingsScreen extends ConsumerWidget {
                                     v,
                                     cal.tolerance,
                                   );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Anchor karat changed to ${v}k',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  backgroundColor: const Color(0xFF222222),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
                             }
                           },
                         ),
@@ -93,15 +109,16 @@ class SettingsScreen extends ConsumerWidget {
                   _divider(),
                   _buildRow(
                     'Gold Tolerance Band',
-                    subtitle: '+/-${cal.tolerance.toInt()}',
+                    subtitle: '+/-${cal.tolerance.toInt()} ADC',
                   ),
                   Slider(
                     value: cal.tolerance,
                     min: 10,
                     max: 2000,
                     divisions: 199,
-                    label: '+/-${cal.tolerance.toInt()}',
+                    label: '+/-${cal.tolerance.toInt()} ADC',
                     onChanged: (v) {
+                      HapticFeedback.selectionClick();
                       ref.read(calibrationProvider.notifier).updateCalibration(
                             cal.anchorADC,
                             cal.anchorKarat,
@@ -144,11 +161,21 @@ class SettingsScreen extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () => context.push('/purity?mode=standalone'),
-                      child: Text(
-                        'Recalibrate from Sample',
-                        style: GoogleFonts.inter(
-                            fontSize: 13, fontWeight: FontWeight.w600),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        context.push('/purity?mode=standalone');
+                      },
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.science, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Recalibrate from Sample',
+                            style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -186,9 +213,26 @@ class SettingsScreen extends ConsumerWidget {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
                           onTap: () {
+                            HapticFeedback.lightImpact();
                             ref
                                 .read(settingsProvider.notifier)
                                 .setPurityCalculationMethod(method);
+                            if (!selected) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Switched to ${method.title}',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  backgroundColor: const Color(0xFF222222),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
                           },
                           child: Container(
                             padding: const EdgeInsets.all(12),
@@ -310,6 +354,7 @@ class SettingsScreen extends ConsumerWidget {
                     trailing: Switch(
                       value: settings.soundEnabled,
                       onChanged: (v) {
+                        HapticFeedback.lightImpact();
                         ref.read(settingsProvider.notifier).setSoundEnabled(v);
                       },
                     ),
@@ -334,9 +379,24 @@ class SettingsScreen extends ConsumerWidget {
                     child: OutlinedButton.icon(
                       onPressed: settings.soundEnabled
                           ? () {
+                              HapticFeedback.lightImpact();
                               ref
                                   .read(soundServiceProvider)
                                   .play(SoundEffect.chimeGold);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Playing test sound...',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  backgroundColor: const Color(0xFF222222),
+                                  duration: const Duration(seconds: 1),
+                                ),
+                              );
                             }
                           : null,
                       icon: const Icon(Icons.volume_up, size: 18),
@@ -362,6 +422,7 @@ class SettingsScreen extends ConsumerWidget {
                     trailing: Switch(
                       value: settings.showLiveChart,
                       onChanged: (v) {
+                        HapticFeedback.lightImpact();
                         ref.read(settingsProvider.notifier).setShowLiveChart(v);
                       },
                     ),
@@ -382,6 +443,7 @@ class SettingsScreen extends ConsumerWidget {
                     trailing: Switch(
                       value: settings.autoReconnect,
                       onChanged: (v) {
+                        HapticFeedback.lightImpact();
                         ref.read(settingsProvider.notifier).setAutoReconnect(v);
                       },
                     ),
@@ -431,19 +493,56 @@ class SettingsScreen extends ConsumerWidget {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () async {
+                        HapticFeedback.mediumImpact();
                         try {
                           final path = await ref
                               .read(historyProvider.notifier)
                               .exportToCsv();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Exported to $path')),
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle, color: Colors.green),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'Data exported successfully!',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: const Color(0xFF222222),
+                                duration: const Duration(seconds: 3),
+                              ),
                             );
                           }
                         } catch (e) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Export failed: $e')),
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    const Icon(Icons.error_outline, color: Colors.red),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'Export failed: $e',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: const Color(0xFFCF6679),
+                              ),
                             );
                           }
                         }
@@ -461,6 +560,7 @@ class SettingsScreen extends ConsumerWidget {
                     width: double.infinity,
                     child: TextButton.icon(
                       onPressed: () {
+                        HapticFeedback.heavyImpact();
                         _showConfirmDialog(
                           context,
                           'Clear All History',
@@ -468,7 +568,23 @@ class SettingsScreen extends ConsumerWidget {
                           () {
                             ref.read(historyProvider.notifier).clearAll();
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('History cleared')),
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    const Icon(Icons.delete_outline, color: Colors.red),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'All history cleared',
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: const Color(0xFF222222),
+                              ),
                             );
                           },
                         );
@@ -490,6 +606,7 @@ class SettingsScreen extends ConsumerWidget {
                     width: double.infinity,
                     child: TextButton.icon(
                       onPressed: () {
+                        HapticFeedback.heavyImpact();
                         _showConfirmDialog(
                           context,
                           'Reset Calibration',
@@ -499,9 +616,23 @@ class SettingsScreen extends ConsumerWidget {
                                 .read(calibrationProvider.notifier)
                                 .resetToDefaults();
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content:
-                                      Text('Calibration reset to defaults')),
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    const Icon(Icons.restore, color: Color(0xFFFFB300)),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Calibration reset to defaults',
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: const Color(0xFF222222),
+                              ),
                             );
                           },
                         );
@@ -615,18 +746,46 @@ class SettingsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Anchor ADC'),
+        backgroundColor: const Color(0xFF2A2A2A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Edit Anchor ADC',
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'ADC Value'),
+          decoration: InputDecoration(
+            labelText: 'ADC Value',
+            labelStyle: GoogleFonts.inter(color: Colors.white.withAlpha(150)),
+            filled: true,
+            fillColor: const Color(0xFF1A1A1A),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.white.withAlpha(30)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFFFB300), width: 1.5),
+            ),
+          ),
           style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(
+                color: Colors.white.withAlpha(180),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -636,9 +795,26 @@ class SettingsScreen extends ConsumerWidget {
                     .read(calibrationProvider.notifier)
                     .updateCalibration(adc, cal.anchorKarat, cal.tolerance);
                 Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Please enter a valid number',
+                      style: GoogleFonts.inter(color: Colors.white),
+                    ),
+                    backgroundColor: const Color(0xFFCF6679),
+                  ),
+                );
               }
             },
-            child: const Text('Save'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFB300),
+              foregroundColor: Colors.black,
+            ),
+            child: Text(
+              'Save',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -650,12 +826,34 @@ class SettingsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+        backgroundColor: const Color(0xFF2A2A2A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          title,
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(
+            color: Colors.white.withAlpha(180),
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(
+                color: Colors.white.withAlpha(180),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -666,7 +864,10 @@ class SettingsScreen extends ConsumerWidget {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Confirm'),
+            child: Text(
+              'Confirm',
+              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),

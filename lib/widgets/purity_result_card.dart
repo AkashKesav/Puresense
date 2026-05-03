@@ -5,10 +5,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/live_data.dart';
 import '../models/purity_calculation_method.dart';
 import '../providers/history_provider.dart';
+import '../providers/metal_reference_provider.dart';
 import '../providers/sound_provider.dart';
 import '../providers/purity_test_provider.dart';
 import '../services/sound_service.dart';
 import '../utils/number_format.dart' as nf;
+import '../utils/range_calculator.dart';
 
 class PurityResultCard extends ConsumerStatefulWidget {
   final PurityResult result;
@@ -76,6 +78,10 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
     final pct =
         r.purityPercent ?? (r.karat != null ? (r.karat! / 24.0) * 100 : 0);
 
+    // Check if unified detector result is available
+    final unified = r.unifiedResult;
+    final hasUnifiedInfo = unified != null && unified.karat != 'Unknown';
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(22),
@@ -104,6 +110,68 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
             ],
           ),
           const SizedBox(height: 20),
+
+          // Show unified detector info if available
+          if (hasUnifiedInfo) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFB300).withAlpha(15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFB300).withAlpha(40)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.science, color: Color(0xFFFFB300), size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'UNIFIED DETECTOR ANALYSIS',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFFFB300),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    unified.karat,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Confidence: ${unified.confidence.toStringAsFixed(1)}%',
+                    style: GoogleFonts.inter(
+                      color: Colors.white.withAlpha(150),
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (unified.explanation.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      unified.explanation,
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withAlpha(100),
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           _row('Purity:',
               '${r.karat}k  (${nf.NumberFormat.formatPercent(pct)}% pure gold)'),
           _row('ADC:', nf.NumberFormat.formatADC(r.meanADC)),
@@ -151,7 +219,13 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
 
   Widget _buildNotGoldResult(BuildContext context) {
     final r = widget.result;
-    final best = r.detectedMetal;
+    final unified = r.unifiedResult;
+    final hasUnifiedInfo = unified != null && unified.karat != 'Unknown';
+
+    // Use SAME identification logic as metals lab!
+    final metalState = ref.read(metalReferenceProvider);
+    final matches = RangeCalculator.identifyMetal(r.meanADC, metalState.allMetals);
+    final bestMatch = matches.isNotEmpty ? matches.first : null;
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -159,19 +233,32 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.withAlpha(80), width: 1.5),
+        border: Border.all(
+          color: bestMatch?.metal.color.withAlpha(80) ?? Colors.grey.withAlpha(80),
+          width: (bestMatch != null && bestMatch.confidence >= 40) ? 2 : 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.cancel, color: Colors.grey, size: 24),
+              Icon(
+                (bestMatch != null && bestMatch.confidence >= 40) ? Icons.science : Icons.help_outline,
+                color: (bestMatch != null && bestMatch.confidence >= 40)
+                    ? bestMatch.metal.color
+                    : Colors.grey,
+                size: 24,
+              ),
               const SizedBox(width: 10),
               Text(
-                'NOT GOLD',
+                hasUnifiedInfo && unified.karat.contains('Gold')
+                    ? 'GOLD DETECTED'
+                    : ((bestMatch != null && bestMatch.confidence >= 40) ? 'METAL IDENTIFIED' : 'CLOSEST MATCH'),
                 style: GoogleFonts.inter(
-                  color: Colors.grey,
+                  color: (bestMatch != null && bestMatch.confidence >= 40)
+                      ? bestMatch.metal.color
+                      : Colors.grey,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
@@ -182,98 +269,178 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
           _row('ADC Reading:', nf.NumberFormat.formatADC(r.meanADC)),
           const SizedBox(height: 16),
 
-          // Detected metal
-          if (best != null && best.confidence >= 40) ...[
+          // Show unified detector result if available
+          if (hasUnifiedInfo) ...[
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: best.metal.color.withAlpha(20),
+                color: unified.karat.contains('Gold')
+                    ? const Color(0xFFFFB300).withAlpha(20)
+                    : Colors.blue.withAlpha(20),
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: unified.karat.contains('Gold')
+                      ? const Color(0xFFFFB300).withAlpha(40)
+                      : Colors.blue.withAlpha(40),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'DETECTED METAL',
-                    style: GoogleFonts.inter(
-                      color: Colors.white.withAlpha(130),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Row(
                     children: [
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: best.metal.color,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
+                      const Icon(Icons.science, color: Color(0xFFFFB300), size: 16),
+                      const SizedBox(width: 6),
                       Text(
-                        best.metal.metalName,
+                        'UNIFIED DETECTOR ANALYSIS',
                         style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                          color: Colors.white.withAlpha(130),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 12),
                   Text(
-                    'Confidence: ${best.confidence.toStringAsFixed(0)}%',
+                    unified.karat,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Confidence: ${unified.confidence.toStringAsFixed(1)}%',
                     style: GoogleFonts.inter(
                       color: const Color(0xFFFFB300),
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Text(
-                    'Expected ADC: ${nf.NumberFormat.formatADC(best.metal.expectedADC.toInt())}  (+/-${((best.metal.max - best.metal.min) / 2).toStringAsFixed(0)})',
-                    style: GoogleFonts.inter(
-                      color: Colors.white.withAlpha(100),
-                      fontSize: 12,
+                  if (unified.explanation.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      unified.explanation,
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withAlpha(100),
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ] else ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.withAlpha(15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Unknown metal or alloy',
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+            // Show closest metal match (using same logic as metals lab)
+            if (bestMatch != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: bestMatch.metal.color.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: bestMatch.metal.color.withAlpha(40),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    r.meanADC < 500
-                        ? 'No signal - poor probe contact.\nClean the probe tip and try again.'
-                        : 'Signal does not match any known reference.',
-                    style: GoogleFonts.inter(
-                      color: Colors.white.withAlpha(100),
-                      fontSize: 13,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      (bestMatch.confidence >= 40) ? 'RANGE MATCH' : 'CLOSEST REFERENCE',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withAlpha(130),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: bestMatch.metal.color,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          bestMatch.metal.metalName,
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Confidence: ${bestMatch.confidence.toStringAsFixed(0)}%',
+                      style: GoogleFonts.inter(
+                        color: (bestMatch.confidence >= 40)
+                            ? const Color(0xFFFFB300)
+                            : Colors.white.withAlpha(170),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'ADC Range: ${nf.NumberFormat.formatADCRange(bestMatch.metal.min, bestMatch.metal.max)}',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withAlpha(100),
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (bestMatch.confidence < 40) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Your reading is ${nf.NumberFormat.formatADC((r.meanADC - bestMatch.metal.expectedADC).abs().toInt())} away from expected',
+                        style: GoogleFonts.inter(
+                          color: Colors.white.withAlpha(80),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withAlpha(15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Unable to identify metal',
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      r.meanADC < 500
+                          ? 'No signal - poor probe contact.\nClean the probe tip and try again.'
+                          : 'No matching metals found.',
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withAlpha(100),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
 
           // Other matches
@@ -346,12 +513,14 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
               const Icon(Icons.warning_amber,
                   color: Color(0xFFFFB300), size: 24),
               const SizedBox(width: 10),
-              Text(
-                'PROBE IN AIR',
-                style: GoogleFonts.inter(
-                  color: const Color(0xFFFFB300),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
+              Expanded(
+                child: Text(
+                  'PROBE IN AIR',
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFFFB300),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
@@ -433,10 +602,13 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
             onPressed: () {
               widget.onReset?.call();
             },
-            child: Text(
-              'Test Again',
-              style:
-                  GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Test Again',
+                style:
+                    GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ),
@@ -444,10 +616,13 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
         Expanded(
           child: ElevatedButton(
             onPressed: () => _saveResult(),
-            child: Text(
-              'Save Result',
-              style:
-                  GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Save Result',
+                style:
+                    GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ),
@@ -476,10 +651,13 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
             onPressed: () {
               widget.onReset?.call();
             },
-            child: Text(
-              'Test Again',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Test Again',
+                style:
+                    GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ),
@@ -487,10 +665,13 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
         Expanded(
           child: OutlinedButton(
             onPressed: () => context.push('/metals'),
-            child: Text(
-              'View in Metals Lab',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'View in Metals Lab',
+                style:
+                    GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
             ),
           ),
         ),
@@ -498,10 +679,13 @@ class _PurityResultCardState extends ConsumerState<PurityResultCard> {
         Expanded(
           child: ElevatedButton(
             onPressed: () => _saveResult(),
-            child: Text(
-              'Save',
-              style:
-                  GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'Save',
+                style:
+                    GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ),

@@ -345,12 +345,15 @@ class _ResultBox extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  color: isGold ? const Color(0xFFFFB300) : Colors.white.withAlpha(130),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    color: isGold ? const Color(0xFFFFB300) : Colors.white.withAlpha(130),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 4),

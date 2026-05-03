@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/live_data.dart';
 import '../utils/range_calculator.dart';
+import '../utils/electrochemical_range_predictor.dart';
 
 class CalibrationState {
   final double anchorADC;
@@ -49,7 +50,7 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
       anchorKarat: anchorKarat,
       tolerance: tolerance,
       karatRanges: RangeCalculator.computeKaratRanges(anchorADC, anchorKarat, tolerance),
-      metalRanges: RangeCalculator.computeMetalRanges(anchorADC),
+      metalRanges: ElectrochemicalRangePredictor.getAllPredictedRanges(), // Use SEP!
     );
   }
 
@@ -62,25 +63,36 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
   }
 
   Future<void> updateCalibration(double adc, int karat, double tolerance) async {
+    // Update electrochemical predictor FIRST with new anchor
+    ElectrochemicalRangePredictor.updateCalibrationAnchor(adc, karat);
+
+    // First update state immediately to trigger UI refresh
+    state = CalibrationState(
+      anchorADC: adc,
+      anchorKarat: karat,
+      tolerance: tolerance,
+      karatRanges: RangeCalculator.computeKaratRanges(adc, karat, tolerance),
+      metalRanges: ElectrochemicalRangePredictor.getAllPredictedRanges(), // Use updated SEP!
+    );
+
+    // Then save to prefs in background
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('anchor_adc', adc);
     await prefs.setInt('anchor_karat', karat);
     await prefs.setDouble('tolerance', tolerance);
 
-    state = state.copyWith(
-      anchorADC: adc,
-      anchorKarat: karat,
-      tolerance: tolerance,
-      karatRanges: RangeCalculator.computeKaratRanges(adc, karat, tolerance),
-      metalRanges: RangeCalculator.computeMetalRanges(adc),
-    );
+    print('✅ Calibration updated: ADC=$adc, Karat=$karat');
+    final karat22k = state.karatRanges.firstWhere((r) => r.karat == 22, orElse: () => state.karatRanges.first);
+    print('   New 22k center: ${karat22k.expectedADC}');
+    print('   Metal ranges updated using electrochemical SEP with new anchor');
   }
 
   void recompute() {
     state = state.copyWith(
       karatRanges: RangeCalculator.computeKaratRanges(state.anchorADC, state.anchorKarat, state.tolerance),
-      metalRanges: RangeCalculator.computeMetalRanges(state.anchorADC),
+      metalRanges: ElectrochemicalRangePredictor.getAllPredictedRanges(), // Use SEP!
     );
+    print('🔄 Recomputed ranges using electrochemical SEP');
   }
 
   Future<void> resetToDefaults() async {

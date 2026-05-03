@@ -33,6 +33,7 @@ class BluetoothService {
   bool _autoReconnectEnabled = true;
   bool _manualDisconnect = false;
   Timer? _reconnectTimer;
+  BluetoothDevice? _lastDevice;
 
   // ─── Purity test state ───
   bool _isCollectingPurity = false;
@@ -58,11 +59,29 @@ class BluetoothService {
     _manualDisconnect = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _lastDevice = device;
     await _connectInternal(
       device,
       retryOnceOnFailure: _autoReconnectEnabled,
     );
   }
+
+  /// Reconnect to the last connected device.
+  /// Returns true if reconnect was attempted, false if no device remembered.
+  Future<bool> reconnect() async {
+    if (_lastDevice == null) return false;
+    _manualDisconnect = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    await _connectInternal(
+      _lastDevice!,
+      retryOnceOnFailure: _autoReconnectEnabled,
+    );
+    return true;
+  }
+
+  /// The last device we successfully/attempted to connect to
+  BluetoothDevice? get lastConnectedDevice => _lastDevice;
 
   Future<void> _connectInternal(
     BluetoothDevice device, {
@@ -181,6 +200,7 @@ class BluetoothService {
             timestamp: DateTime.now(),
             adc: liveData.adcValue,
           ));
+          print('📊 [BT] Sample ${_purityADCSamples.length}: ${liveData.adcValue} ADC');
         }
       }
     }
@@ -255,23 +275,48 @@ class BluetoothService {
 
   /// Internal collection method with configurable duration.
   Future<int> _startCollection(Duration duration) async {
+    print('🔄 [BT] Starting collection for ${duration.inMilliseconds}ms');
     _purityADCSamples.clear();
     _purityTimedSamples.clear();
     _isCollectingPurity = true;
     _purityCompleter = Completer<int>();
 
+    // Main collection timer
     _purityTimer = Timer(duration, () {
-      _isCollectingPurity = false;
-      if (_purityADCSamples.isEmpty) {
-        _purityCompleter?.complete(0);
-      } else {
-        final mean = _purityADCSamples.reduce((a, b) => a + b) ~/
-            _purityADCSamples.length;
-        _purityCompleter?.complete(mean);
+      print('🔄 [BT] Collection timer fired! Samples collected: ${_purityADCSamples.length}');
+      _completeCollection();
+    });
+
+    // SAFETY: Force completion after 2x duration (prevents hanging)
+    Timer(duration * 2, () {
+      if (_isCollectingPurity) {
+        print('⚠️ [BT] Safety timer fired - forcing completion');
+        _completeCollection();
       }
     });
 
     return _purityCompleter!.future;
+  }
+
+  /// Complete the collection and calculate mean
+  void _completeCollection() {
+    if (!_isCollectingPurity) {
+      print('⚠️ [BT] Collection already completed, skipping');
+      return;
+    }
+
+    _isCollectingPurity = false;
+    _purityTimer?.cancel();
+
+    if (_purityADCSamples.isEmpty) {
+      print('⚠️ [BT] No samples collected, completing with 0');
+      _purityCompleter?.complete(0);
+    } else {
+      final mean = _purityADCSamples.reduce((a, b) => a + b) ~/
+          _purityADCSamples.length;
+      print('✅ [BT] Collection completed with mean: $mean ADC from ${_purityADCSamples.length} samples');
+      _purityCompleter?.complete(mean);
+    }
   }
 
   /// Get the raw ADC samples collected during purity test

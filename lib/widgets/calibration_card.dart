@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/calibration_provider.dart';
 import '../providers/bt_provider.dart';
+import '../providers/metal_reference_provider.dart';
 import '../utils/number_format.dart' as nf;
 
 class CalibrationCard extends ConsumerStatefulWidget {
@@ -16,12 +17,37 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
   bool _isExpanded = false;
   bool _isCalibrating = false;
   int? _karatSelection;
-  final _adcController = TextEditingController();
+  late final TextEditingController _adcController;
+
+  @override
+  void initState() {
+    super.initState();
+    _adcController = TextEditingController();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Update text controller when calibration changes
+    final cal = ref.watch(calibrationProvider);
+    if (_adcController.text.isEmpty ||
+        _adcController.text == nf.NumberFormat.formatADC(-1500)) {
+      _adcController.text = nf.NumberFormat.formatADC(cal.anchorADC.toInt());
+    }
+  }
+
+  @override
+  void dispose() {
+    _adcController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final cal = ref.watch(calibrationProvider);
-    final isCalibrated = cal.anchorADC != 0;
+    final metalState = ref.watch(metalReferenceProvider); // Watch metal reference provider!
+    // Check if actually calibrated (not default -1500) or if user has set a custom value
+    final isCalibrated = cal.anchorADC != -1500.0;
 
     _karatSelection ??= cal.anchorKarat;
 
@@ -93,8 +119,8 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
             ),
           ),
 
-          // Expanded content
-          if (_isExpanded || !isCalibrated)
+          // Expanded content - only show when explicitly expanded
+          if (_isExpanded)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
@@ -218,7 +244,14 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                         final karat = _karatSelection ?? cal.anchorKarat;
 
                         ref.read(calibrationProvider.notifier).updateCalibration(adc, karat, cal.tolerance);
-                        setState(() => _isExpanded = false);
+                        print('✅ Calibration updated: ADC=$adc, Karat=$karat');
+
+                        // Close the card after successful save
+                        setState(() {
+                          _isExpanded = false;
+                        });
+
+                        print('✅ Metal reference ranges synced to new anchor');
 
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -234,7 +267,7 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                     ),
                   ),
 
-                  // Live preview
+                  // Live preview - Now with electrochemical predictions!
                   const SizedBox(height: 12),
                   Text(
                     'Live Range Preview',
@@ -245,7 +278,8 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  ...cal.karatRanges.take(3).map((r) => Padding(
+                  // Use metal reference provider for electrochemical predictions
+                  ...metalState.allMetals.where((m) => m.metalName.contains('Gold')).take(3).map((metal) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     child: Row(
                       children: [
@@ -253,13 +287,13 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: r.color,
+                            color: metal.color,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${r.karat}k',
+                          metal.metalName, // Shows "Gold 24k", "Gold 22k", etc.
                           style: GoogleFonts.inter(
                             color: Colors.white.withAlpha(130),
                             fontSize: 12,
@@ -268,7 +302,7 @@ class _CalibrationCardState extends ConsumerState<CalibrationCard> {
                         ),
                         const Spacer(),
                         Text(
-                          nf.NumberFormat.formatADCRange(r.min, r.max),
+                          nf.NumberFormat.formatADCRange(metal.min, metal.max),
                           style: GoogleFonts.inter(
                             color: Colors.white.withAlpha(100),
                             fontSize: 12,

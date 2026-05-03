@@ -14,7 +14,7 @@ class SettingsState {
     this.volume = 0.8,
     this.showLiveChart = true,
     this.autoReconnect = true,
-    this.calculationMethod = PurityCalculationMethod.standardMean,
+    this.calculationMethod = PurityCalculationMethod.unifiedEnsemble, // NEW DEFAULT!
   });
 
   bool get useStatisticalMethod =>
@@ -49,16 +49,27 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     );
     final legacyStatistical = prefs.getBool('useStatisticalMethod') ?? false;
 
+    // Force migration to Unified Ensemble as default
+    // Existing users get upgraded to the new advanced detection system
+    final effectiveMethod = storedMethod ??
+        (legacyStatistical
+            ? PurityCalculationMethod.detrendedSlope
+            : PurityCalculationMethod.standardMean);
+
     state = SettingsState(
       soundEnabled: prefs.getBool('soundEnabled') ?? true,
       volume: prefs.getDouble('volume') ?? 0.8,
       showLiveChart: prefs.getBool('showLiveChart') ?? true,
       autoReconnect: prefs.getBool('autoReconnect') ?? true,
-      calculationMethod: storedMethod ??
-          (legacyStatistical
-              ? PurityCalculationMethod.detrendedSlope
-              : PurityCalculationMethod.standardMean),
+      calculationMethod: effectiveMethod,
     );
+
+    // Auto-upgrade existing users to Unified Ensemble (one-time migration)
+    if (effectiveMethod != PurityCalculationMethod.unifiedEnsemble) {
+      // Migrate to unified ensemble in background
+      await setPurityCalculationMethod(PurityCalculationMethod.unifiedEnsemble);
+      print('🔄 Auto-upgraded to Unified Ensemble detection system');
+    }
   }
 
   Future<void> setSoundEnabled(bool v) async {

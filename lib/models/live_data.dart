@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'purity_calculation_method.dart';
 import '../utils/statistical_classifier.dart';
+import '../utils/unified_detector.dart';
 
 enum PurityOutcome { gold, notGold, probeInAir, unknown }
 
@@ -86,6 +87,9 @@ class PurityResult {
   /// Statistical analysis result (only present when slope method is used)
   final StatisticalResult? statisticalResult;
 
+  /// Unified detector result (only present when unified ensemble method is used)
+  final UnifiedResult? unifiedResult;
+
   PurityResult({
     required this.outcome,
     required this.meanADC,
@@ -99,6 +103,7 @@ class PurityResult {
     required this.timestamp,
     this.calculationMethod = PurityCalculationMethod.standardMean,
     this.statisticalResult,
+    this.unifiedResult,
   });
 
   String get historyLabel {

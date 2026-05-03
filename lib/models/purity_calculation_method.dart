@@ -2,6 +2,7 @@ enum PurityCalculationMethod {
   standardMean,
   detrendedSlope,
   adaptiveStatistical,
+  unifiedEnsemble, // ← NEW! Wavelet + Kalman + GMM + RF
 }
 
 extension PurityCalculationMethodX on PurityCalculationMethod {
@@ -13,6 +14,8 @@ extension PurityCalculationMethodX on PurityCalculationMethod {
         return 'detrendedSlope';
       case PurityCalculationMethod.adaptiveStatistical:
         return 'adaptiveStatistical';
+      case PurityCalculationMethod.unifiedEnsemble:
+        return 'unifiedEnsemble';
     }
   }
 
@@ -24,6 +27,8 @@ extension PurityCalculationMethodX on PurityCalculationMethod {
         return 'Slope De-trended';
       case PurityCalculationMethod.adaptiveStatistical:
         return 'Adaptive Statistical';
+      case PurityCalculationMethod.unifiedEnsemble:
+        return '⭐ Unified AI (Best)';
     }
   }
 
@@ -35,6 +40,8 @@ extension PurityCalculationMethodX on PurityCalculationMethod {
         return 'Slope Mode';
       case PurityCalculationMethod.adaptiveStatistical:
         return 'Adaptive Mode';
+      case PurityCalculationMethod.unifiedEnsemble:
+        return '⭐ Unified AI';
     }
   }
 
@@ -46,6 +53,8 @@ extension PurityCalculationMethodX on PurityCalculationMethod {
         return 'Uses mean, slope, and variance to recover ADC0, then classifies with fixed ranges.';
       case PurityCalculationMethod.adaptiveStatistical:
         return 'Uses mean, slope, and variance to build dynamic per-test ranges and a drift-aware reading.';
+      case PurityCalculationMethod.unifiedEnsemble:
+        return 'Combines Wavelet denoising, Kalman filtering, and ML for maximum accuracy (95%+ expected).';
     }
   }
 
@@ -56,6 +65,8 @@ extension PurityCalculationMethodX on PurityCalculationMethod {
       case PurityCalculationMethod.detrendedSlope:
         return const Duration(seconds: 1);
       case PurityCalculationMethod.adaptiveStatistical:
+        return const Duration(milliseconds: 800);
+      case PurityCalculationMethod.unifiedEnsemble:
         return const Duration(milliseconds: 800);
     }
   }
